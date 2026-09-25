@@ -33,7 +33,7 @@ A built-in study planner agent can do the planning for you. Describe your course
    npm install
    ```
 
-2. Set up the database. In the Supabase dashboard, open the SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql). It creates the `classes`, `class_meetings` and `tasks` tables, their indexes and their Row Level Security policies.
+2. Set up the database. In the Supabase dashboard, open the SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql). It creates the `classes`, `class_meetings`, `class_weights` and `tasks` tables, their indexes and their Row Level Security policies.
 
 3. Configure environment variables. Copy the example file and fill in the values:
 
@@ -107,5 +107,6 @@ proxy.ts            Refreshes the session and keeps signed-out users out of /das
 | [`20260924000000_add_scheduled_for_to_tasks.sql`](supabase/migrations/20260924000000_add_scheduled_for_to_tasks.sql) | The `scheduled_for` (planned day) column |
 | [`20260925000000_add_description_and_priority_to_tasks.sql`](supabase/migrations/20260925000000_add_description_and_priority_to_tasks.sql) | The `description` and `priority` columns |
 | [`20260925120000_add_classes.sql`](supabase/migrations/20260925120000_add_classes.sql) | The `classes` and `class_meetings` tables, and the `class_id` column on tasks |
+| [`20260926000000_add_grading.sql`](supabase/migrations/20260926000000_add_grading.sql) | Grading columns on tasks, `grading_mode` on classes, and the `class_weights` table |
 
 Don't run a migration on a database created from the current `schema.sql`, because those columns already exist there.

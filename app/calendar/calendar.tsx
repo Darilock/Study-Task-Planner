@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   CALENDAR_VIEWS,
   eachDateKey,
@@ -18,10 +18,65 @@ import type { Task } from "@/lib/types";
 import { TaskItem } from "../dashboard/task-item";
 import { AgendaView } from "./agenda-view";
 import { DayList } from "./day-list";
+import { FilterPanel } from "./filter-panel";
 import { DEFAULT_FILTER, dayItemCount, groupByDay, type CalendarClass, type CalendarFilter } from "./items";
 import { MonthView } from "./month-view";
 import { Sheet } from "./sheet";
 import { WeekView } from "./week-view";
+
+const FILTER_STORAGE_KEY = "calendar-filter";
+const filterListeners = new Set<() => void>();
+// Used when localStorage is unavailable (private windows, blocked site data).
+let filterInMemory: string | null = null;
+
+function subscribeToFilter(listener: () => void) {
+  filterListeners.add(listener);
+  return () => filterListeners.delete(listener);
+}
+
+function readStoredFilter(): string | null {
+  try {
+    return localStorage.getItem(FILTER_STORAGE_KEY) ?? filterInMemory;
+  } catch {
+    return filterInMemory;
+  }
+}
+
+function parseFilter(raw: string | null): CalendarFilter {
+  try {
+    const saved = JSON.parse(raw ?? "null");
+    if (saved && Array.isArray(saved.hiddenClasses) && typeof saved.showCompleted === "boolean") {
+      return {
+        hiddenClasses: saved.hiddenClasses.filter((c: unknown) => typeof c === "string"),
+        showCompleted: saved.showCompleted,
+      };
+    }
+  } catch {
+    // Fall through to the default.
+  }
+  return DEFAULT_FILTER;
+}
+
+/**
+ * The filter, remembered in this browser only. The server render (and the
+ * first client render) use the default, so hydration always matches.
+ */
+function useStoredFilter() {
+  const raw = useSyncExternalStore(subscribeToFilter, readStoredFilter, () => null);
+  const filter = useMemo(() => parseFilter(raw), [raw]);
+
+  function update(next: CalendarFilter) {
+    filterInMemory = JSON.stringify(next);
+    try {
+      localStorage.setItem(FILTER_STORAGE_KEY, filterInMemory);
+    } catch {
+      // Still applied for this visit via filterInMemory.
+    }
+    filterListeners.forEach((listener) => listener());
+  }
+
+  return [filter, update] as const;
+}
 
 const VIEW_LABELS: Record<CalendarView, string> = { month: "Month", week: "Week", agenda: "Agenda" };
 
@@ -47,7 +102,8 @@ type Props = {
 export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classes }: Props) {
   const router = useRouter();
   const today = useLocalToday();
-  const [filter] = useState<CalendarFilter>(DEFAULT_FILTER);
+  const [filter, setFilter] = useStoredFilter();
+  const [filterOpen, setFilterOpen] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
@@ -63,6 +119,7 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
   const days = useMemo(() => groupByDay(dates, tasks, meetings, filter), [dates, tasks, meetings, filter]);
   const classesById = useMemo(() => new Map(classes.map((c) => [c.id, c])), [classes]);
   const month = anchor.slice(0, 7);
+  const hiddenCount = filter.hiddenClasses.length + (filter.showCompleted ? 0 : 1);
   const monthDates = useMemo(() => dates.filter((d) => d.startsWith(month)), [dates, month]);
 
   // Looked up on every render so the sheet shows fresh data after an edit,
@@ -132,6 +189,22 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
               );
             })}
           </nav>
+          <button
+            type="button"
+            onClick={() => setFilterOpen(true)}
+            className={`${navButton} gap-1.5`}
+            aria-label={hiddenCount > 0 ? `Filter, ${hiddenCount} hidden` : "Filter"}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="size-4" aria-hidden>
+              <path d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 8 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L2.659 6.22A2.25 2.25 0 0 1 2 4.629V2.34a.75.75 0 0 1 .628-.74Z" />
+            </svg>
+            Filter
+            {hiddenCount > 0 && (
+              <span aria-hidden className="rounded-full bg-foreground px-1.5 text-xs leading-5 text-background">
+                {hiddenCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -163,6 +236,10 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
           <span aria-hidden className="rounded-sm bg-red-600 px-1 text-[10px] font-bold text-white">!</span> Extreme priority
         </span>
       </p>
+
+      <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter calendar">
+        <FilterPanel classes={classes} filter={filter} onChange={setFilter} />
+      </Sheet>
 
       <Sheet
         open={openDay !== null}

@@ -1,3 +1,5 @@
+import type { GradingMode, LetterGrade, TaskType } from "./grades";
+
 export type TaskStatus = "todo" | "in_progress" | "done";
 
 // Ordered lowest to highest; the index is the sort rank.
@@ -10,6 +12,7 @@ export function isPriority(value: unknown): value is TaskPriority {
 }
 
 export const DESCRIPTION_MAX_LENGTH = 2000;
+export const MAX_POINTS_LIMIT = 100000;
 
 export type Task = {
   id: string;
@@ -21,6 +24,11 @@ export type Task = {
   scheduled_for: string | null;
   priority: TaskPriority;
   class_id: string | null;
+  task_type: TaskType | null;
+  max_points: number | null;
+  score: number | null;
+  letter_grade: LetterGrade | null;
+  graded_at: string | null;
   status: TaskStatus;
   created_at: string;
 };
@@ -44,6 +52,10 @@ export type SchoolClass = {
   color: string | null;
   start_date: string | null;
   end_date: string | null;
+  grading_mode: GradingMode;
   created_at: string;
   class_meetings: ClassMeeting[];
+  class_weights: ClassWeight[];
 };
+
+export type ClassWeight = { task_type: TaskType; weight: number };

@@ -9,6 +9,9 @@ import { AgentPanel } from "./agent-panel";
 import { SortControl } from "./sort-control";
 import { TaskItem } from "./task-item";
 
+const TASK_COLUMNS =
+  "id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, class_id, task_type, max_points, score, letter_grade, graded_at, status, created_at";
+
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({
@@ -26,7 +29,7 @@ export default async function DashboardPage({
   const [{ data, error }, { data: classData }] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, class_id, status, created_at"),
+      .select(TASK_COLUMNS),
     supabase.from("classes").select("id, name, color").order("name", { ascending: true }),
   ]);
   // If classes fail to load, tasks still render, just without class labels.
@@ -70,6 +73,7 @@ export default async function DashboardPage({
                       key={task.id}
                       task={task}
                       schoolClass={task.class_id ? classesById.get(task.class_id) : undefined}
+                      classes={classes}
                     />
                   ))}
                 </ul>
@@ -87,6 +91,7 @@ export default async function DashboardPage({
                       key={task.id}
                       task={task}
                       schoolClass={task.class_id ? classesById.get(task.class_id) : undefined}
+                      classes={classes}
                     />
                   ))}
                 </ul>

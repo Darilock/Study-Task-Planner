@@ -2,8 +2,10 @@
 
 import { useState, useTransition, type FormEvent } from "react";
 import { formatDate } from "@/lib/format";
+import { TASK_TYPE_LABELS } from "@/lib/grades";
 import { DESCRIPTION_MAX_LENGTH, type ClassSummary, type Task } from "@/lib/types";
 import { deleteTask, setTaskStatus, updateTaskDetails } from "./actions";
+import { GradingFields } from "./grading-fields";
 import { PriorityBadge } from "./priority-badge";
 import { PrioritySelect } from "./priority-select";
 
@@ -39,7 +41,15 @@ function TaskDescription({ text, muted }: { text: string; muted: boolean }) {
   );
 }
 
-export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: ClassSummary }) {
+type Props = {
+  task: Task;
+  /** The task's class, if it has one. */
+  schoolClass?: ClassSummary;
+  /** Every class, for the edit form's class picker. */
+  classes: ClassSummary[];
+};
+
+export function TaskItem({ task, schoolClass, classes }: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -61,10 +71,7 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     run(async () => {
-      await updateTaskDetails(task.id, {
-        priority: form.get("priority") as Task["priority"],
-        description: String(form.get("description") ?? ""),
-      });
+      await updateTaskDetails(task.id, form);
       setEditing(false);
     });
   }
@@ -123,6 +130,11 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
               <span className="truncate">{schoolClass.name}</span>
             </span>
           )}
+          {task.task_type && (
+            <span className="rounded border border-zinc-300 px-1.5 text-[11px] font-semibold uppercase leading-[18px] tracking-wide text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+              {TASK_TYPE_LABELS[task.task_type]}
+            </span>
+          )}
           <PriorityBadge priority={task.priority} />
             {task.subject && (
               <span className="rounded-full bg-zinc-100 px-2 text-xs leading-5 dark:bg-zinc-800">
@@ -158,7 +170,7 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
             }}
             disabled={pending}
             aria-expanded={editing}
-            aria-label={`Edit priority and description of "${task.title}"`}
+            aria-label={`Edit "${task.title}"`}
             className="flex size-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" className="size-5" aria-hidden>
@@ -192,6 +204,7 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
             Priority
             <PrioritySelect name="priority" defaultValue={task.priority} />
           </label>
+          <GradingFields classes={classes} defaults={task} />
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             Description
             <textarea

@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { DEFAULT_PRIORITY, DESCRIPTION_MAX_LENGTH, type ClassSummary } from "@/lib/types";
 import { addTask } from "./actions";
+import { GradingFields } from "./grading-fields";
 import { PrioritySelect } from "./priority-select";
 
 export function AddTaskForm({ classes }: { classes: ClassSummary[] }) {
@@ -35,21 +36,8 @@ export function AddTaskForm({ classes }: { classes: ClassSummary[] }) {
         />
       </label>
 
-      {classes.length > 0 && (
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          <span>
-            Class <span className="font-normal text-zinc-500">(optional)</span>
-          </span>
-          <select name="class_id" defaultValue="" className="input">
-            <option value="">No class</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      {/* Re-mounted after each save so the type picker resets with the form. */}
+      <GradingFields key={state.ok ?? 0} classes={classes} />
 
       <label className="flex flex-col gap-1.5 text-sm font-medium">
         <span>

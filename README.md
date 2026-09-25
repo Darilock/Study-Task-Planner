@@ -7,7 +7,7 @@ A built-in study planner agent can do the planning for you. Describe your course
 ## Features
 
 - Email and password sign-up, login and logout with Supabase Auth, including email confirmation links
-- A private task list per user, with a title, subject, due date, estimated minutes, planned day and status (`todo`, `in_progress`, `done`)
+- A private task list per user, with a title, optional description, subject, due date, estimated minutes, planned day, priority (`low`, `medium`, `high`, `extreme`) and status (`todo`, `in_progress`, `done`)
 - A study planner agent, powered by Claude, that can list, create and schedule your tasks
 - Row Level Security in the database, so every query, including the agent's, can only reach the signed-in user's own tasks
 
@@ -98,4 +98,11 @@ proxy.ts            Refreshes the session and keeps signed-out users out of /das
 
 ## Upgrading an existing database
 
-`supabase/schema.sql` always describes the current schema, so a new project needs only that file. If your database was created before the planned-day feature, run [`supabase/migrations/20260924000000_add_scheduled_for_to_tasks.sql`](supabase/migrations/20260924000000_add_scheduled_for_to_tasks.sql) to add the `scheduled_for` column. Don't run it on a database created from the current `schema.sql`, because the column already exists there.
+`supabase/schema.sql` always describes the current schema, so a new project needs only that file. For a database created from an older schema, run the files in `supabase/migrations/` that it doesn't have yet, oldest first:
+
+| Migration | Adds |
+| --- | --- |
+| [`20260924000000_add_scheduled_for_to_tasks.sql`](supabase/migrations/20260924000000_add_scheduled_for_to_tasks.sql) | The `scheduled_for` (planned day) column |
+| [`20260925000000_add_description_and_priority_to_tasks.sql`](supabase/migrations/20260925000000_add_description_and_priority_to_tasks.sql) | The `description` and `priority` columns |
+
+Don't run a migration on a database created from the current `schema.sql`, because those columns already exist there.

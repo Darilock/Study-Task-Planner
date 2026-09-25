@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { DEFAULT_PRIORITY, DESCRIPTION_MAX_LENGTH } from "@/lib/types";
 import { addTask } from "./actions";
+import { PrioritySelect } from "./priority-select";
 
 export function AddTaskForm() {
   const [state, formAction, pending] = useActionState(addTask, {});
@@ -33,7 +35,20 @@ export function AddTaskForm() {
         />
       </label>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        <span>
+          Description <span className="font-normal text-zinc-500">(optional)</span>
+        </span>
+        <textarea
+          name="description"
+          rows={2}
+          maxLength={DESCRIPTION_MAX_LENGTH}
+          placeholder="Notes, links, page numbers…"
+          className="input py-2"
+        />
+      </label>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           Subject
           <input name="subject" maxLength={100} placeholder="Biology" className="input" />
@@ -54,6 +69,10 @@ export function AddTaskForm() {
             placeholder="45"
             className="input"
           />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Priority
+          <PrioritySelect name="priority" defaultValue={DEFAULT_PRIORITY} />
         </label>
       </div>
 

@@ -10,6 +10,8 @@ import {
   type TaskStatus,
 } from "@/lib/types";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type AddTaskState = { error?: string; ok?: number };
 
 export async function addTask(
@@ -20,6 +22,7 @@ export async function addTask(
   const description = String(formData.get("description") ?? "").trim();
   const priority = String(formData.get("priority") ?? DEFAULT_PRIORITY);
   const subject = String(formData.get("subject") ?? "").trim();
+  const classId = String(formData.get("class_id") ?? "");
   const dueDate = String(formData.get("due_date") ?? "");
   const minutesRaw = String(formData.get("estimated_minutes") ?? "").trim();
 
@@ -29,6 +32,7 @@ export async function addTask(
     return { error: `Description must be ${DESCRIPTION_MAX_LENGTH} characters or fewer.` };
   }
   if (!isPriority(priority)) return { error: "Pick a valid priority." };
+  if (classId && !UUID_RE.test(classId)) return { error: "Pick a valid class." };
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
     return { error: "Due date is invalid." };
   }
@@ -43,6 +47,8 @@ export async function addTask(
     title,
     description: description || null,
     subject: subject || null,
+    // The (class_id, user_id) foreign key rejects another user's class.
+    class_id: classId || null,
     due_date: dueDate || null,
     estimated_minutes: minutes,
     priority,

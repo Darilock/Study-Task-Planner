@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
-import { DEFAULT_PRIORITY, DESCRIPTION_MAX_LENGTH } from "@/lib/types";
+import { DEFAULT_PRIORITY, DESCRIPTION_MAX_LENGTH, type ClassSummary } from "@/lib/types";
 import { addTask } from "./actions";
 import { PrioritySelect } from "./priority-select";
 
-export function AddTaskForm() {
+export function AddTaskForm({ classes }: { classes: ClassSummary[] }) {
   const [state, formAction, pending] = useActionState(addTask, {});
   const formRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -34,6 +34,22 @@ export function AddTaskForm() {
           className="input"
         />
       </label>
+
+      {classes.length > 0 && (
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          <span>
+            Class <span className="font-normal text-zinc-500">(optional)</span>
+          </span>
+          <select name="class_id" defaultValue="" className="input">
+            <option value="">No class</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <label className="flex flex-col gap-1.5 text-sm font-medium">
         <span>

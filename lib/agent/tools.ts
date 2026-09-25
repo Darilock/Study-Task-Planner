@@ -1,6 +1,7 @@
 import "server-only";
 
 import type Anthropic from "@anthropic-ai/sdk";
+import { isValidDate } from "@/lib/dates";
 import type { createClient } from "@/lib/supabase/server";
 import { DEFAULT_PRIORITY, DESCRIPTION_MAX_LENGTH, isPriority, PRIORITIES, type TaskPriority } from "@/lib/types";
 import type { AgentAction } from "./types";
@@ -264,13 +265,6 @@ function asUuid(value: unknown, label: string): string {
     throw new ToolInputError(`${label} must be a task id from list_tasks.`);
   }
   return value;
-}
-
-export function isValidDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  // Round-trip rejects impossible dates like 2026-02-30.
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 function asDate(value: unknown, label: string): string {

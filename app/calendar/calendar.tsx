@@ -15,6 +15,7 @@ import {
 import type { MeetingOccurrence } from "@/lib/calendar/recurrence";
 import { useLocalToday } from "@/lib/use-local-today";
 import type { Task } from "@/lib/types";
+import { AddTaskForm } from "../dashboard/add-task-form";
 import { TaskItem } from "../dashboard/task-item";
 import { AgendaView } from "./agenda-view";
 import { DayList } from "./day-list";
@@ -105,6 +106,7 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
   const [filter, setFilter] = useStoredFilter();
   const [filterOpen, setFilterOpen] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
+  const [addingTask, setAddingTask] = useState(false);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   // Without a date in the URL the server guessed today in UTC. If the
@@ -243,7 +245,10 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
 
       <Sheet
         open={openDay !== null}
-        onClose={() => setOpenDay(null)}
+        onClose={() => {
+          setOpenDay(null);
+          setAddingTask(false);
+        }}
         title={openDay ? formatDateKey(openDay, "EEEE, MMMM d") : ""}
       >
         {openDay && days.get(openDay) && (
@@ -258,6 +263,20 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
                 onOpenTask={viewProps.onOpenTask}
               />
             )}
+            <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+              {addingTask ? (
+                <AddTaskForm
+                  key={openDay}
+                  classes={classes}
+                  defaultDueDate={openDay}
+                  onAdded={() => setAddingTask(false)}
+                />
+              ) : (
+                <button type="button" onClick={() => setAddingTask(true)} className="btn-primary w-full">
+                  Add a task due {formatDateKey(openDay, "EEE, MMM d")}
+                </button>
+              )}
+            </div>
           </>
         )}
       </Sheet>

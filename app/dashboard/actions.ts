@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { TaskStatus } from "@/lib/types";
+import {
+  DEFAULT_PRIORITY,
+  DESCRIPTION_MAX_LENGTH,
+  isPriority,
+  type TaskStatus,
+} from "@/lib/types";
 
 export type AddTaskState = { error?: string; ok?: number };
 
@@ -11,12 +16,18 @@ export async function addTask(
   formData: FormData,
 ): Promise<AddTaskState> {
   const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const priority = String(formData.get("priority") ?? DEFAULT_PRIORITY);
   const subject = String(formData.get("subject") ?? "").trim();
   const dueDate = String(formData.get("due_date") ?? "");
   const minutesRaw = String(formData.get("estimated_minutes") ?? "").trim();
 
   if (!title) return { error: "Give the task a title." };
   if (title.length > 200) return { error: "Title must be 200 characters or fewer." };
+  if (description.length > DESCRIPTION_MAX_LENGTH) {
+    return { error: `Description must be ${DESCRIPTION_MAX_LENGTH} characters or fewer.` };
+  }
+  if (!isPriority(priority)) return { error: "Pick a valid priority." };
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
     return { error: "Due date is invalid." };
   }
@@ -29,9 +40,11 @@ export async function addTask(
   // user_id is intentionally omitted: the column defaults to auth.uid().
   const { error } = await supabase.from("tasks").insert({
     title,
+    description: description || null,
     subject: subject || null,
     due_date: dueDate || null,
     estimated_minutes: minutes,
+    priority,
   });
   if (error) return { error: "Couldn't save the task. Please try again." };
 

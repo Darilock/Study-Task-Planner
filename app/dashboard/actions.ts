@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { isTaskType } from "@/lib/grades";
+import { isLetterGrade, isTaskType } from "@/lib/grades";
 import { createClient } from "@/lib/supabase/server";
 import {
   DEFAULT_PRIORITY,
@@ -121,4 +121,71 @@ export async function updateTaskDetails(id: string, formData: FormData) {
   if (error?.code === "23514") throw new Error("A score needs max points. Clear the grade first.");
   if (error) throw new Error("Couldn't update the task.");
   revalidatePath("/dashboard");
+}
+
+const SCORE_LIMIT = 1_000_000;
+
+function revalidateGrades() {
+  revalidatePath("/dashboard");
+  revalidatePath("/classes");
+  revalidatePath("/grades");
+}
+
+/**
+ * Saves a score (out of max points) or a letter grade, and marks the task done.
+ * Only graded types can have a grade, and only once the due date has passed.
+ */
+export async function saveGrade(id: string, formData: FormData) {
+  const format = formData.get("format");
+  const supabase = await createClient();
+  const { data: task, error: loadError } = await supabase
+    .from("tasks")
+    .select("task_type, due_date")
+    .eq("id", id)
+    .maybeSingle();
+  if (loadError) throw new Error("Couldn't save the grade.");
+  if (!task) throw new Error("This task no longer exists. Refresh the page.");
+  if (!task.task_type) throw new Error("Only graded work can have a grade. Set the task's type first.");
+  // The browser uses the student's local date. The server only knows UTC, so
+  // compare with the UTC date, which is never behind a due date that has passed locally.
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  if (task.due_date && task.due_date > todayUtc) throw new Error("You can enter a grade after the due date.");
+
+  let grade: { score: number | null; letter_grade: string | null; max_points?: number };
+  if (format === "letter") {
+    const letter = formData.get("letter_grade");
+    if (!isLetterGrade(letter)) throw new Error("Pick a letter grade.");
+    grade = { score: null, letter_grade: letter };
+  } else if (format === "score") {
+    const scoreRaw = String(formData.get("score") ?? "").trim();
+    const maxRaw = String(formData.get("max_points") ?? "").trim();
+    const score = Number(scoreRaw);
+    const maxPoints = Number(maxRaw);
+    if (!scoreRaw || !Number.isFinite(score) || score < 0 || score > SCORE_LIMIT) {
+      throw new Error("Enter a score of 0 or more.");
+    }
+    if (!maxRaw || !Number.isFinite(maxPoints) || maxPoints <= 0 || maxPoints > MAX_POINTS_LIMIT) {
+      throw new Error(`Max points must be more than 0 and at most ${MAX_POINTS_LIMIT}.`);
+    }
+    grade = { score, letter_grade: null, max_points: maxPoints };
+  } else {
+    throw new Error("Choose a score or a letter grade.");
+  }
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({ ...grade, graded_at: new Date().toISOString(), status: "done" })
+    .eq("id", id);
+  if (error) throw new Error("Couldn't save the grade.");
+  revalidateGrades();
+}
+
+export async function clearGrade(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ score: null, letter_grade: null, graded_at: null })
+    .eq("id", id);
+  if (error) throw new Error("Couldn't clear the grade.");
+  revalidateGrades();
 }

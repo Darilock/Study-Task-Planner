@@ -4,11 +4,45 @@ import { useState, useTransition } from "react";
 import { formatDate } from "@/lib/format";
 import type { Task } from "@/lib/types";
 import { deleteTask, setTaskStatus } from "./actions";
+import { PriorityBadge } from "./priority-badge";
+
+// Descriptions longer than this, or with more lines, start collapsed.
+const COLLAPSE_CHARS = 160;
+const COLLAPSE_LINES = 3;
+
+function TaskDescription({ text, muted }: { text: string; muted: boolean }) {
+  const long = text.length > COLLAPSE_CHARS || text.split("\n").length > COLLAPSE_LINES;
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = long && !expanded;
+
+  return (
+    <div className="mt-1">
+      <p
+        className={`whitespace-pre-line break-words text-sm ${
+          muted ? "text-zinc-500" : "text-zinc-700 dark:text-zinc-300"
+        } ${collapsed ? "line-clamp-2" : ""}`}
+      >
+        {text}
+      </p>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="-ml-1 px-1 py-2 text-sm font-medium text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function TaskItem({ task }: { task: Task }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const done = task.status === "done";
+  const urgent = task.priority === "extreme" && !done;
 
   function run(fn: () => Promise<void>) {
     setError(null);
@@ -24,8 +58,8 @@ export function TaskItem({ task }: { task: Task }) {
   return (
     <li
       className={`flex items-start gap-3 rounded-xl border border-zinc-200 bg-white p-3 transition-opacity dark:border-zinc-800 dark:bg-zinc-950 ${
-        pending ? "opacity-60" : ""
-      }`}
+        urgent ? "border-l-4 border-l-red-600 dark:border-l-red-500" : ""
+      } ${pending ? "opacity-60" : ""}`}
     >
       <button
         type="button"
@@ -62,7 +96,9 @@ export function TaskItem({ task }: { task: Task }) {
         >
           {task.title}
         </p>
+        {task.description && <TaskDescription text={task.description} muted={done} />}
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <PriorityBadge priority={task.priority} />
           {task.subject && (
             <span className="rounded-full bg-zinc-100 px-2 text-xs leading-5 dark:bg-zinc-800">
               {task.subject}

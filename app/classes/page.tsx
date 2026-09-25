@@ -6,6 +6,9 @@ import type { SchoolClass } from "@/lib/types";
 import { ClassCard } from "./class-card";
 import { NewClassPanel } from "./new-class-panel";
 
+const CLASS_COLUMNS =
+  "id, name, instructor, location, color, start_date, end_date, grading_mode, created_at, class_meetings(id, day_of_week, start_time, end_time), class_weights(task_type, weight)";
+
 export const metadata: Metadata = { title: "Classes" };
 
 export default async function ClassesPage() {
@@ -17,7 +20,7 @@ export default async function ClassesPage() {
 
   const { data, error } = await supabase
     .from("classes")
-    .select("id, name, instructor, location, color, start_date, end_date, created_at, class_meetings(id, day_of_week, start_time, end_time)")
+    .select(CLASS_COLUMNS)
     .order("name", { ascending: true });
   const classes = (data ?? []) as SchoolClass[];
 

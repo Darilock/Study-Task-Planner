@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition, type FormEvent } from "react";
 import { CLASS_COLORS } from "@/lib/class-colors";
+import { TASK_TYPE_LABELS, TASK_TYPES, type GradingMode, type TaskType } from "@/lib/grades";
 import { DAY_NAMES, MAX_MEETINGS_PER_CLASS, WEEK_ORDER } from "@/lib/schedule";
 import type { SchoolClass } from "@/lib/types";
 import type { ClassFormResult } from "./actions";
@@ -23,6 +24,12 @@ function initialRows(schoolClass?: SchoolClass): MeetingRow[] {
     }));
 }
 
+function initialWeights(schoolClass?: SchoolClass) {
+  const weights = Object.fromEntries(TASK_TYPES.map((t) => [t, ""])) as Record<TaskType, string>;
+  for (const w of schoolClass?.class_weights ?? []) weights[w.task_type] = String(w.weight);
+  return weights;
+}
+
 type Props = {
   schoolClass?: SchoolClass;
   action: (formData: FormData) => Promise<ClassFormResult>;
@@ -34,6 +41,8 @@ type Props = {
 
 export function ClassForm({ schoolClass, action, submitLabel, pendingLabel, onSaved, onCancel }: Props) {
   const [rows, setRows] = useState(() => initialRows(schoolClass));
+  const [gradingMode, setGradingMode] = useState<GradingMode>(schoolClass?.grading_mode ?? "percent");
+  const [weights, setWeights] = useState(() => initialWeights(schoolClass));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -65,6 +74,8 @@ export function ClassForm({ schoolClass, action, submitLabel, pendingLabel, onSa
       if (!schoolClass) {
         formRef.current?.reset();
         setRows([]);
+        setGradingMode("percent");
+        setWeights(initialWeights());
       }
       onSaved?.();
     });
@@ -143,6 +154,33 @@ export function ClassForm({ schoolClass, action, submitLabel, pendingLabel, onSa
             </label>
           ))}
         </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1.5 text-sm font-medium">Grading</legend>
+        <div className="inline-flex self-start rounded-lg border border-zinc-200 bg-white p-0.5 dark:border-zinc-800 dark:bg-zinc-950">
+          {(["percent", "points"] as const).map((mode) => (
+            <label
+              key={mode}
+              className="flex min-h-10 cursor-pointer items-center rounded-md px-3 text-sm font-medium text-zinc-700 has-checked:bg-foreground has-checked:text-background has-focus-visible:outline-2 has-focus-visible:outline-zinc-500 dark:text-zinc-300"
+            >
+              <input
+                type="radio"
+                name="grading_mode"
+                value={mode}
+                checked={gradingMode === mode}
+                onChange={() => setGradingMode(mode)}
+                className="sr-only"
+              />
+              {mode === "percent" ? "Percentages" : "Points"}
+            </label>
+          ))}
+        </div>
+        {gradingMode === "points" ? (
+          <p className="text-sm text-zinc-500">Your average is total points earned out of total points possible.</p>
+        ) : (
+          <WeightFields weights={weights} onChange={(type, value) => setWeights((w) => ({ ...w, [type]: value }))} />
+        )}
       </fieldset>
 
       <fieldset className="flex flex-col gap-2">
@@ -240,5 +278,59 @@ export function ClassForm({ schoolClass, action, submitLabel, pendingLabel, onSa
         </button>
       </div>
     </form>
+  );
+}
+
+function WeightFields({
+  weights,
+  onChange,
+}: {
+  weights: Record<TaskType, string>;
+  onChange: (type: TaskType, value: string) => void;
+}) {
+  const entered = TASK_TYPES.map((t) => Number(weights[t])).filter((w) => Number.isFinite(w) && w > 0);
+  const total = Math.round(entered.reduce((sum, w) => sum + w, 0) * 100) / 100;
+
+  return (
+    <>
+      <p className="text-sm text-zinc-500">
+        How much each type counts toward your grade. Leave a type blank if the class doesn&apos;t have it.
+      </p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {TASK_TYPES.map((type) => (
+          <label key={type} className="flex flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            {TASK_TYPE_LABELS[type]}
+            <span className="relative">
+              <input
+                name={`weight_${type}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                step="any"
+                value={weights[type]}
+                onChange={(e) => onChange(type, e.target.value)}
+                className="input pr-8"
+              />
+              <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-zinc-500">
+                %
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {entered.length > 0 && (
+        <p
+          role="status"
+          className={`text-sm ${
+            total === 100 ? "text-zinc-600 dark:text-zinc-400" : "font-medium text-amber-800 dark:text-amber-300"
+          }`}
+        >
+          {total === 100
+            ? "Weights total 100%."
+            : `Weights total ${total}%, not 100%. You can still save; your average uses the weights of the types you have grades for.`}
+        </p>
+      )}
+    </>
   );
 }

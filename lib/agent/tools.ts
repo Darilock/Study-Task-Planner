@@ -2,18 +2,19 @@ import "server-only";
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { createClient } from "@/lib/supabase/server";
+import { DEFAULT_PRIORITY, DESCRIPTION_MAX_LENGTH, isPriority, PRIORITIES, type TaskPriority } from "@/lib/types";
 import type { AgentAction } from "./types";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 const MAX_TASKS_PER_CALL = 20;
-const TASK_COLUMNS = "id, title, subject, due_date, estimated_minutes, scheduled_for, status";
+const TASK_COLUMNS = "id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, status";
 
 export const tools: Anthropic.Tool[] = [
   {
     name: "list_tasks",
     description:
-      "List the student's tasks with their id, title, subject, due_date, estimated_minutes, scheduled_for, and status. " +
+      "List the student's tasks with their id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, and status. " +
       "Call this before scheduling so you know which tasks exist and what is already planned. " +
       "Completed tasks are excluded unless include_done is true.",
     input_schema: {
@@ -32,6 +33,7 @@ export const tools: Anthropic.Tool[] = [
     description:
       `Create between 1 and ${MAX_TASKS_PER_CALL} new tasks for the student. ` +
       "Dates are YYYY-MM-DD. due_date is the deadline; scheduled_for is the day the student plans to work on it. " +
+      `priority defaults to "${DEFAULT_PRIORITY}"; reserve "extreme" for urgent, high-stakes work. ` +
       "Check list_tasks first so you don't create duplicates.",
     input_schema: {
       type: "object",
@@ -44,6 +46,10 @@ export const tools: Anthropic.Tool[] = [
             type: "object",
             properties: {
               title: { type: "string", description: "Short task title, max 200 characters." },
+              description: {
+                type: ["string", "null"],
+                description: `Optional details such as chapters, pages or instructions, max ${DESCRIPTION_MAX_LENGTH} characters.`,
+              },
               subject: { type: ["string", "null"], description: "Course or subject, max 100 characters." },
               due_date: { type: ["string", "null"], description: "Deadline, YYYY-MM-DD." },
               estimated_minutes: {
@@ -51,6 +57,11 @@ export const tools: Anthropic.Tool[] = [
                 description: "Estimated effort in minutes, 1 to 10000.",
               },
               scheduled_for: { type: ["string", "null"], description: "Planned work day, YYYY-MM-DD." },
+              priority: {
+                type: "string",
+                enum: [...PRIORITIES],
+                description: `How important the task is. Defaults to "${DEFAULT_PRIORITY}".`,
+              },
             },
             required: ["title"],
             additionalProperties: false,
@@ -141,13 +152,19 @@ async function createTasks(
   }
 
   const rows = obj.tasks.map((raw, i) => {
-    const t = asObject(raw, ["title", "subject", "due_date", "estimated_minutes", "scheduled_for"], `tasks[${i}]`);
+    const t = asObject(
+      raw,
+      ["title", "description", "subject", "due_date", "estimated_minutes", "scheduled_for", "priority"],
+      `tasks[${i}]`,
+    );
     return {
       title: asString(t.title, `tasks[${i}].title`, 200),
+      description: optional(t.description, (v) => asString(v, `tasks[${i}].description`, DESCRIPTION_MAX_LENGTH)),
       subject: optional(t.subject, (v) => asString(v, `tasks[${i}].subject`, 100)),
       due_date: optional(t.due_date, (v) => asDate(v, `tasks[${i}].due_date`)),
       estimated_minutes: optional(t.estimated_minutes, (v) => asMinutes(v, `tasks[${i}].estimated_minutes`)),
       scheduled_for: optional(t.scheduled_for, (v) => asDate(v, `tasks[${i}].scheduled_for`)),
+      priority: optional(t.priority, (v) => asPriority(v, `tasks[${i}].priority`)) ?? DEFAULT_PRIORITY,
     };
   });
 
@@ -225,6 +242,11 @@ function asString(value: unknown, label: string, maxLength: number): string {
 
 function asBoolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new ToolInputError(`${label} must be true or false.`);
+  return value;
+}
+
+function asPriority(value: unknown, label: string): TaskPriority {
+  if (!isPriority(value)) throw new ToolInputError(`${label} must be one of: ${PRIORITIES.join(", ")}.`);
   return value;
 }
 

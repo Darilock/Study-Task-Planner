@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { isValidDate, runTool, tools } from "@/lib/agent/tools";
+import { runTool, tools } from "@/lib/agent/tools";
+import { isValidDate } from "@/lib/dates";
 import { AGENT_INPUT_MAX_LENGTH, type AgentAction, type AgentResponse } from "@/lib/agent/types";
 
 const MAX_ITERATIONS = 8;

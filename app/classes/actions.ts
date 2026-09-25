@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { HEX_COLOR_RE } from "@/lib/class-colors";
 import { isValidDate } from "@/lib/dates";
+import { TASK_TYPES, type GradingMode, type TaskType } from "@/lib/grades";
 import { MAX_MEETINGS_PER_CLASS } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,6 +12,7 @@ export type ClassFormResult = { error?: string };
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 type Meeting = { day_of_week: number; start_time: string; end_time: string };
+type Weight = { task_type: TaskType; weight: number };
 
 function optionalText(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim() || null;
@@ -24,6 +26,7 @@ function parseClassForm(formData: FormData) {
   const color = optionalText(formData, "color");
   const startDate = optionalText(formData, "start_date");
   const endDate = optionalText(formData, "end_date");
+  const gradingMode: GradingMode = formData.get("grading_mode") === "points" ? "points" : "percent";
 
   if (!name) return { error: "Give the class a name." };
   if (name.length > 100) return { error: "Name must be 100 characters or fewer." };
@@ -59,14 +62,30 @@ function parseClassForm(formData: FormData) {
     meetings.push({ day_of_week: day, start_time: starts[i], end_time: ends[i] });
   }
 
+  // Weights only apply in percentage mode, and are only sent then. Blank means no weight.
+  const weights: Weight[] = [];
+  if (gradingMode === "percent") {
+    for (const type of TASK_TYPES) {
+      const raw = String(formData.get(`weight_${type}`) ?? "").trim();
+      if (!raw) continue;
+      const weight = Number(raw);
+      if (!Number.isFinite(weight) || weight <= 0 || weight > 100) {
+        return { error: "Each weight must be more than 0% and at most 100%." };
+      }
+      weights.push({ task_type: type, weight });
+    }
+  }
+
   return {
-    values: { name, instructor, location, color, start_date: startDate, end_date: endDate },
+    values: { name, instructor, location, color, start_date: startDate, end_date: endDate, grading_mode: gradingMode },
     meetings,
+    weights,
   };
 }
 
 function revalidate() {
   revalidatePath("/classes");
+  revalidatePath("/grades");
   // Tasks show their class's name and color.
   revalidatePath("/dashboard");
 }
@@ -89,6 +108,16 @@ export async function createClass(formData: FormData): Promise<ClassFormResult> 
       // Don't leave a half-saved class behind.
       await supabase.from("classes").delete().eq("id", data.id);
       return { error: "Couldn't save the meeting times. Please try again." };
+    }
+  }
+
+  if (parsed.weights.length > 0) {
+    const { error: weightsError } = await supabase
+      .from("class_weights")
+      .insert(parsed.weights.map((w) => ({ ...w, class_id: data.id })));
+    if (weightsError) {
+      await supabase.from("classes").delete().eq("id", data.id);
+      return { error: "Couldn't save the weights. Please try again." };
     }
   }
 
@@ -124,6 +153,34 @@ export async function updateClass(id: string, formData: FormData): Promise<Class
     if (deleteError) {
       revalidate();
       return { error: "Saved, but some old meeting times couldn't be removed. Edit the class to fix them." };
+    }
+  }
+
+  // In points mode the weights aren't shown, so keep them for if the class switches back.
+  if (parsed.values.grading_mode === "percent") {
+    if (parsed.weights.length > 0) {
+      const { error: upsertError } = await supabase
+        .from("class_weights")
+        .upsert(
+          parsed.weights.map((w) => ({ ...w, class_id: id })),
+          { onConflict: "class_id,task_type" },
+        );
+      if (upsertError) {
+        revalidate();
+        return { error: "Saved, but the weights couldn't be updated. Please try again." };
+      }
+    }
+    const cleared = TASK_TYPES.filter((t) => !parsed.weights.some((w) => w.task_type === t));
+    if (cleared.length > 0) {
+      const { error: clearError } = await supabase
+        .from("class_weights")
+        .delete()
+        .eq("class_id", id)
+        .in("task_type", cleared);
+      if (clearError) {
+        revalidate();
+        return { error: "Saved, but some weights couldn't be removed. Please try again." };
+      }
     }
   }
 

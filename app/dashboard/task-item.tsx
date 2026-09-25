@@ -2,8 +2,13 @@
 
 import { useState, useTransition, type FormEvent } from "react";
 import { formatDate } from "@/lib/format";
+import { formatTaskGrade } from "@/lib/format-grade";
+import { TASK_TYPE_LABELS } from "@/lib/grades";
 import { DESCRIPTION_MAX_LENGTH, type ClassSummary, type Task } from "@/lib/types";
+import { useLocalToday } from "@/lib/use-local-today";
 import { deleteTask, setTaskStatus, updateTaskDetails } from "./actions";
+import { GradeForm } from "./grade-form";
+import { GradingFields } from "./grading-fields";
 import { PriorityBadge } from "./priority-badge";
 import { PrioritySelect } from "./priority-select";
 
@@ -39,11 +44,26 @@ function TaskDescription({ text, muted }: { text: string; muted: boolean }) {
   );
 }
 
-export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: ClassSummary }) {
+type Props = {
+  task: Task;
+  /** The task's class, if it has one. */
+  schoolClass?: ClassSummary;
+  /** Every class, for the edit form's class picker. */
+  classes: ClassSummary[];
+};
+
+export function TaskItem({ task, schoolClass, classes }: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [panel, setPanel] = useState<"edit" | "grade" | null>(null);
+  const today = useLocalToday();
   const done = task.status === "done";
+  const grade = formatTaskGrade(task);
+  // Grades can be entered once the due date has passed (or any time with no
+  // due date), and edited whenever one exists.
+  const canGrade =
+    task.task_type !== null &&
+    (grade !== null || (today !== null && (task.due_date === null || task.due_date < today)));
   const urgent = task.priority === "extreme" && !done;
 
   function run(fn: () => Promise<void>) {
@@ -61,11 +81,8 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     run(async () => {
-      await updateTaskDetails(task.id, {
-        priority: form.get("priority") as Task["priority"],
-        description: String(form.get("description") ?? ""),
-      });
-      setEditing(false);
+      await updateTaskDetails(task.id, form);
+      setPanel(null);
     });
   }
 
@@ -114,16 +131,27 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
           {task.description && <TaskDescription text={task.description} muted={done} />}
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
             {schoolClass && (
-            <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-zinc-100 px-2 text-xs leading-5 dark:bg-zinc-800">
-              <span
-                aria-hidden
-                className="size-2 shrink-0 rounded-full bg-zinc-400"
-                style={schoolClass.color ? { backgroundColor: schoolClass.color } : undefined}
-              />
-              <span className="truncate">{schoolClass.name}</span>
-            </span>
-          )}
-          <PriorityBadge priority={task.priority} />
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-zinc-100 px-2 text-xs leading-5 dark:bg-zinc-800">
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-full bg-zinc-400"
+                  style={schoolClass.color ? { backgroundColor: schoolClass.color } : undefined}
+                />
+                <span className="truncate">{schoolClass.name}</span>
+              </span>
+            )}
+            {task.task_type && (
+              <span className="rounded border border-zinc-300 px-1.5 text-[11px] font-semibold uppercase leading-[18px] tracking-wide text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+                {TASK_TYPE_LABELS[task.task_type]}
+              </span>
+            )}
+            {grade && (
+              <span className="rounded-full bg-emerald-100 px-2 text-xs font-semibold leading-5 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200">
+                <span className="sr-only">Grade: </span>
+                {grade}
+              </span>
+            )}
+            <PriorityBadge priority={task.priority} />
             {task.subject && (
               <span className="rounded-full bg-zinc-100 px-2 text-xs leading-5 dark:bg-zinc-800">
                 {task.subject}
@@ -142,6 +170,19 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
             {task.due_date && <span>Due {formatDate(task.due_date)}</span>}
             {task.estimated_minutes != null && <span>{task.estimated_minutes} min</span>}
           </div>
+          {canGrade && panel !== "grade" && (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setPanel("grade");
+              }}
+              disabled={pending}
+              className="-ml-2 mt-1 inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950"
+            >
+              {grade ? "Edit grade" : "Enter grade"}
+            </button>
+          )}
           {error && (
             <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
               {error}
@@ -154,11 +195,11 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
             type="button"
             onClick={() => {
               setError(null);
-              setEditing(!editing);
+              setPanel(panel === "edit" ? null : "edit");
             }}
             disabled={pending}
-            aria-expanded={editing}
-            aria-label={`Edit priority and description of "${task.title}"`}
+            aria-expanded={panel === "edit"}
+            aria-label={`Edit "${task.title}"`}
             className="flex size-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" className="size-5" aria-hidden>
@@ -186,12 +227,15 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
         </div>
       </div>
 
-      {editing && (
+      {panel === "grade" && <GradeForm task={task} onDone={() => setPanel(null)} />}
+
+      {panel === "edit" && (
         <form onSubmit={saveDetails} className="mt-3 flex flex-col gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             Priority
             <PrioritySelect name="priority" defaultValue={task.priority} />
           </label>
+          <GradingFields classes={classes} defaults={task} />
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             Description
             <textarea
@@ -206,7 +250,7 @@ export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: Clas
           <div className="flex gap-2 sm:justify-end">
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={() => setPanel(null)}
               className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-4 text-base font-medium text-zinc-700 hover:bg-zinc-100 sm:flex-none dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
               Cancel

@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ClassAverageDisplay } from "@/components/class-average";
 import { formatTerm } from "@/lib/format";
+import type { ClassAverage } from "@/lib/grades";
 import { formatSchedule } from "@/lib/schedule";
 import type { SchoolClass } from "@/lib/types";
 import { deleteClass, updateClass } from "./actions";
 import { ClassForm } from "./class-form";
 
-function ClassDetails({ schoolClass }: { schoolClass: SchoolClass }) {
+function ClassDetails({ schoolClass, average }: { schoolClass: SchoolClass; average: ClassAverage }) {
   const schedule = formatSchedule(schoolClass.class_meetings);
   const term = formatTerm(schoolClass.start_date, schoolClass.end_date);
   const people = [schoolClass.instructor, schoolClass.location].filter(Boolean).join(" · ");
@@ -22,6 +24,9 @@ function ClassDetails({ schoolClass }: { schoolClass: SchoolClass }) {
         />
         <span className="min-w-0">{schoolClass.name}</span>
       </h3>
+      <div className="mt-1">
+        <ClassAverageDisplay average={average} mode={schoolClass.grading_mode} />
+      </div>
       {schedule.length > 0 ? (
         <ul className="mt-1 text-sm font-medium tabular-nums text-zinc-800 dark:text-zinc-200">
           {schedule.map((line) => (
@@ -37,7 +42,7 @@ function ClassDetails({ schoolClass }: { schoolClass: SchoolClass }) {
   );
 }
 
-export function ClassCard({ schoolClass }: { schoolClass: SchoolClass }) {
+export function ClassCard({ schoolClass, average }: { schoolClass: SchoolClass; average: ClassAverage }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -77,7 +82,7 @@ export function ClassCard({ schoolClass }: { schoolClass: SchoolClass }) {
       }`}
     >
       <div className="flex items-start gap-3">
-        <ClassDetails schoolClass={schoolClass} />
+        <ClassDetails schoolClass={schoolClass} average={average} />
         <div className="-m-1.5 flex shrink-0">
           <button
             type="button"

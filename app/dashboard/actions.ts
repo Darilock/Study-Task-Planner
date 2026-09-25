@@ -6,6 +6,7 @@ import {
   DEFAULT_PRIORITY,
   DESCRIPTION_MAX_LENGTH,
   isPriority,
+  type TaskPriority,
   type TaskStatus,
 } from "@/lib/types";
 
@@ -68,5 +69,26 @@ export async function deleteTask(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) throw new Error("Couldn't delete the task.");
+  revalidatePath("/dashboard");
+}
+
+export async function updateTaskDetails(
+  id: string,
+  details: { priority: TaskPriority; description: string },
+) {
+  const { priority } = details;
+  if (!isPriority(priority)) throw new Error("Pick a valid priority.");
+  if (typeof details.description !== "string") throw new Error("Description is invalid.");
+  const description = details.description.trim();
+  if (description.length > DESCRIPTION_MAX_LENGTH) {
+    throw new Error(`Description must be ${DESCRIPTION_MAX_LENGTH} characters or fewer.`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ priority, description: description || null })
+    .eq("id", id);
+  if (error) throw new Error("Couldn't update the task.");
   revalidatePath("/dashboard");
 }

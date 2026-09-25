@@ -24,3 +24,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 16px inputs stop iOS Safari from zooming on focus; 44px targets for touch. */
+@layer components {
+  .input {
+    @apply min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-base font-normal text-zinc-900 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-300 dark:focus:ring-zinc-100/10;
+  }
+  .btn-primary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-lg bg-foreground px-4 text-base font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50;
+  }
+}

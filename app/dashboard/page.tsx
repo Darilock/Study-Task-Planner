@@ -2,14 +2,21 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/auth/actions";
+import { parseSort, sortTasks } from "@/lib/sort-tasks";
 import type { Task } from "@/lib/types";
 import { AddTaskForm } from "./add-task-form";
 import { AgentPanel } from "./agent-panel";
+import { SortControl } from "./sort-control";
 import { TaskItem } from "./task-item";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const sort = parseSort((await searchParams).sort);
   const supabase = await createClient();
   // proxy.ts already redirects, but check here too so the page is never
   // rendered for a signed-out user.
@@ -18,11 +25,10 @@ export default async function DashboardPage() {
 
   const { data, error } = await supabase
     .from("tasks")
-    .select("id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, status, created_at")
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: true });
+    .select("id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, status, created_at");
 
-  const tasks = (data ?? []) as Task[];
+  // Sorted here rather than in SQL because priority is text, not an ordered type.
+  const tasks = sortTasks((data ?? []) as Task[], sort);
   const open = tasks.filter((t) => t.status !== "done");
   const done = tasks.filter((t) => t.status === "done");
 
@@ -55,6 +61,8 @@ export default async function DashboardPage() {
           </p>
         ) : (
           <>
+            {tasks.length > 1 && <SortControl current={sort} />}
+
             <section aria-labelledby="open-heading">
               <h2 id="open-heading" className="mb-2 text-sm font-semibold text-zinc-600 dark:text-zinc-400">
                 To do ({open.length})

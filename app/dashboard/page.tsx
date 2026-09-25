@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/auth/actions";
 import type { Task } from "@/lib/types";
 import { AddTaskForm } from "./add-task-form";
+import { AgentPanel } from "./agent-panel";
 import { TaskItem } from "./task-item";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -45,6 +46,7 @@ export default async function DashboardPage() {
       </header>
 
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <AgentPanel />
         <AddTaskForm />
 
         {error ? (

@@ -17,7 +17,7 @@ export default async function DashboardPage() {
 
   const { data, error } = await supabase
     .from("tasks")
-    .select("id, title, subject, due_date, estimated_minutes, status, created_at")
+    .select("id, title, subject, due_date, estimated_minutes, scheduled_for, status, created_at")
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
 

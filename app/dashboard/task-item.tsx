@@ -1,18 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { formatDate } from "@/lib/format";
 import type { Task } from "@/lib/types";
 import { deleteTask, setTaskStatus } from "./actions";
-
-function formatDueDate(date: string) {
-  // due_date is a plain date; format in UTC so it never shifts a day.
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 export function TaskItem({ task }: { task: Task }) {
   const [pending, startTransition] = useTransition();
@@ -82,7 +73,12 @@ export function TaskItem({ task }: { task: Task }) {
               In progress
             </span>
           )}
-          {task.due_date && <span>Due {formatDueDate(task.due_date)}</span>}
+          {task.scheduled_for && (
+            <span className="rounded-full bg-sky-100 px-2 text-xs leading-5 text-sky-900 dark:bg-sky-900/40 dark:text-sky-200">
+              Planned {formatDate(task.scheduled_for)}
+            </span>
+          )}
+          {task.due_date && <span>Due {formatDate(task.due_date)}</span>}
           {task.estimated_minutes != null && <span>{task.estimated_minutes} min</span>}
         </div>
         {error && (

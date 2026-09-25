@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { createClient } from "@/lib/supabase/server";
 import type { SchoolClass } from "@/lib/types";
-import { ClassDetails } from "./class-card";
+import { ClassCard } from "./class-card";
 import { NewClassPanel } from "./new-class-panel";
 
 export const metadata: Metadata = { title: "Classes" };
@@ -43,12 +43,7 @@ export default async function ClassesPage() {
                 </h2>
                 <ul className="flex flex-col gap-2">
                   {classes.map((c) => (
-                    <li
-                      key={c.id}
-                      className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
-                    >
-                      <ClassDetails schoolClass={c} />
-                    </li>
+                    <ClassCard key={c.id} schoolClass={c} />
                   ))}
                 </ul>
               </section>

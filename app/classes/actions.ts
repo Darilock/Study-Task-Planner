@@ -95,3 +95,46 @@ export async function createClass(formData: FormData): Promise<ClassFormResult> 
   revalidate();
   return {};
 }
+
+export async function updateClass(id: string, formData: FormData): Promise<ClassFormResult> {
+  const parsed = parseClassForm(formData);
+  if ("error" in parsed) return { error: parsed.error };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("classes").update(parsed.values).eq("id", id).select("id").maybeSingle();
+  if (error) return { error: "Couldn't save the class. Please try again." };
+  if (!data) return { error: "This class no longer exists. Refresh the page." };
+
+  // Replace the meeting times: insert the new set first, then remove the old
+  // rows, so a failure never leaves the class with no meetings at all.
+  const { data: old, error: oldError } = await supabase.from("class_meetings").select("id").eq("class_id", id);
+  if (oldError) return { error: "Couldn't update the meeting times. Please try again." };
+
+  if (parsed.meetings.length > 0) {
+    const { error: insertError } = await supabase
+      .from("class_meetings")
+      .insert(parsed.meetings.map((m) => ({ ...m, class_id: id })));
+    if (insertError) return { error: "Couldn't update the meeting times. Please try again." };
+  }
+  if (old.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("class_meetings")
+      .delete()
+      .in("id", old.map((m) => m.id));
+    if (deleteError) {
+      revalidate();
+      return { error: "Saved, but some old meeting times couldn't be removed. Edit the class to fix them." };
+    }
+  }
+
+  revalidate();
+  return {};
+}
+
+// Meetings are deleted by the foreign key cascade; tasks keep existing with no class.
+export async function deleteClass(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("classes").delete().eq("id", id);
+  if (error) throw new Error("Couldn't delete the class.");
+  revalidate();
+}

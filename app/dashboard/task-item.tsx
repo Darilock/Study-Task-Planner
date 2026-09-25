@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type FormEvent } from "react";
 import { formatDate } from "@/lib/format";
-import { DESCRIPTION_MAX_LENGTH, type Task } from "@/lib/types";
+import { DESCRIPTION_MAX_LENGTH, type ClassSummary, type Task } from "@/lib/types";
 import { deleteTask, setTaskStatus, updateTaskDetails } from "./actions";
 import { PriorityBadge } from "./priority-badge";
 import { PrioritySelect } from "./priority-select";
@@ -39,7 +39,7 @@ function TaskDescription({ text, muted }: { text: string; muted: boolean }) {
   );
 }
 
-export function TaskItem({ task }: { task: Task }) {
+export function TaskItem({ task, schoolClass }: { task: Task; schoolClass?: ClassSummary }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -113,7 +113,17 @@ export function TaskItem({ task }: { task: Task }) {
           </p>
           {task.description && <TaskDescription text={task.description} muted={done} />}
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-            <PriorityBadge priority={task.priority} />
+            {schoolClass && (
+            <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-zinc-100 px-2 text-xs leading-5 dark:bg-zinc-800">
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-full bg-zinc-400"
+                style={schoolClass.color ? { backgroundColor: schoolClass.color } : undefined}
+              />
+              <span className="truncate">{schoolClass.name}</span>
+            </span>
+          )}
+          <PriorityBadge priority={task.priority} />
             {task.subject && (
               <span className="rounded-full bg-zinc-100 px-2 text-xs leading-5 dark:bg-zinc-800">
                 {task.subject}

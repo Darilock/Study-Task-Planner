@@ -33,6 +33,9 @@ export type ClassMeeting = {
   end_time: string;
 };
 
+/** The parts of a class shown on tasks and in the task form. */
+export type ClassSummary = Pick<SchoolClass, "id" | "name" | "color">;
+
 export type SchoolClass = {
   id: string;
   name: string;

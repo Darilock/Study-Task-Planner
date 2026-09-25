@@ -9,6 +9,7 @@ A built-in study planner agent can do the planning for you. Describe your course
 - Email and password sign-up, login and logout with Supabase Auth, including email confirmation links
 - A private task list per user, with a title, optional description, subject, due date, estimated minutes, planned day, priority (`low`, `medium`, `high`, `extreme`) and status (`todo`, `in_progress`, `done`)
 - Classes with an instructor, location, color, term dates and weekly meeting times, shown as a compact schedule such as "MWF 10:00–10:50 AM". Tasks can optionally belong to a class
+- Grading: give a task a type (homework, quiz, test, project, exam or discussion) and max points, then enter a score or a letter grade once it's due. Each class is graded by weighted percentages or by total points, and the Classes and Grades pages show each class's current average as a percentage and a letter
 - A study planner agent, powered by Claude, that can list, create and schedule your tasks
 - Row Level Security in the database, so every query, including the agent's, can only reach the signed-in user's own tasks and classes
 
@@ -68,6 +69,7 @@ A built-in study planner agent can do the planning for you. Describe your course
 | `npm run build` | Create a production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint |
+| `npm test` | Run the unit tests with Node's built-in test runner |
 
 ## The study planner agent
 
@@ -85,17 +87,19 @@ The server validates every tool input before it reaches the database. The agent 
 app/
   api/agent/        Planner agent API route
   auth/             Auth server actions and the email confirmation callback
-  classes/          Class list, class form (with meeting times) and class actions
-  dashboard/        Task list, add-task form, agent panel and task actions
+  classes/          Class list, class form (with meeting times, grading mode and weights) and class actions
+  dashboard/        Task list, add-task form, grade form, agent panel and task actions
+  grades/           Grades overview of every class
   login/, signup/   Auth pages
-components/         Shared UI (the auth form and the app header with navigation)
+components/         Shared UI (the auth form, the app header with navigation, class averages)
 lib/
+  grades.ts         Letter grades and class average calculation (tested in grades.test.ts)
   agent/            Agent tool definitions, validation and shared types
   supabase/         Supabase clients for the browser, the server and the proxy
 supabase/
   schema.sql        Full database schema for a new project
   migrations/       Changes for databases created from an older schema
-proxy.ts            Refreshes the session and keeps signed-out users out of /dashboard and /classes
+proxy.ts            Refreshes the session and keeps signed-out users out of /dashboard, /classes and /grades
 ```
 
 ## Upgrading an existing database

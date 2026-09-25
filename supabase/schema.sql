@@ -3,9 +3,11 @@ create table public.tasks (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   title text not null,
   subject text,
+  description text,
   due_date date,
   estimated_minutes int,
   scheduled_for date,
+  priority text not null default 'medium' check (priority in ('low', 'medium', 'high', 'extreme')),
   status text not null default 'todo' check (status in ('todo', 'in_progress', 'done')),
   created_at timestamptz not null default now()
 );

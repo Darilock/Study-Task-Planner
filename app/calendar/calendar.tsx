@@ -21,6 +21,7 @@ import { DayList } from "./day-list";
 import { DEFAULT_FILTER, dayItemCount, groupByDay, type CalendarClass, type CalendarFilter } from "./items";
 import { MonthView } from "./month-view";
 import { Sheet } from "./sheet";
+import { WeekView } from "./week-view";
 
 const VIEW_LABELS: Record<CalendarView, string> = { month: "Month", week: "Week", agenda: "Agenda" };
 
@@ -109,7 +110,7 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
             aria-label="Calendar view"
             className="flex flex-1 rounded-lg border border-zinc-200 bg-white p-0.5 sm:flex-none dark:border-zinc-800 dark:bg-zinc-950"
           >
-            {CALENDAR_VIEWS.filter((v) => v !== "week").map((v) => {
+            {CALENDAR_VIEWS.map((v) => {
               // With no view chosen, month shows on wide screens and agenda on phones.
               const active =
                 view === v
@@ -134,7 +135,9 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
         </div>
       </div>
 
-      {view === "month" || view === "week" ? (
+      {view === "week" ? (
+        <WeekView dates={dates} {...viewProps} />
+      ) : view === "month" ? (
         <MonthView dates={dates} month={month} {...viewProps} />
       ) : view === "agenda" ? (
         <AgendaView dates={monthDates} {...viewProps} />

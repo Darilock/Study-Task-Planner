@@ -50,12 +50,14 @@ type Props = {
   schoolClass?: ClassSummary;
   /** Every class, for the edit form's class picker. */
   classes: ClassSummary[];
+  /** Open with the edit panel already showing, e.g. when opened from the calendar. */
+  startEditing?: boolean;
 };
 
-export function TaskItem({ task, schoolClass, classes }: Props) {
+export function TaskItem({ task, schoolClass, classes, startEditing = false }: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [panel, setPanel] = useState<"edit" | "grade" | null>(null);
+  const [panel, setPanel] = useState<"edit" | "grade" | null>(startEditing ? "edit" : null);
   const today = useLocalToday();
   const done = task.status === "done";
   const grade = formatTaskGrade(task);

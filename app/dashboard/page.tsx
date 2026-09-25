@@ -3,14 +3,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppHeader } from "@/components/app-header";
 import { parseSort, sortTasks } from "@/lib/sort-tasks";
-import type { ClassSummary, Task } from "@/lib/types";
+import { TASK_COLUMNS, type ClassSummary, type Task } from "@/lib/types";
 import { AddTaskForm } from "./add-task-form";
 import { AgentPanel } from "./agent-panel";
 import { SortControl } from "./sort-control";
 import { TaskItem } from "./task-item";
-
-const TASK_COLUMNS =
-  "id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, class_id, task_type, max_points, score, letter_grade, graded_at, status, created_at";
 
 export const metadata: Metadata = { title: "Dashboard" };
 

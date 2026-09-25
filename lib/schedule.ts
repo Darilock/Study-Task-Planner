@@ -1,5 +1,7 @@
 import type { ClassMeeting } from "./types";
 
+export const MAX_MEETINGS_PER_CLASS = 14;
+
 // Indexed by day_of_week (0 = Sunday).
 export const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_ABBREVIATIONS = ["Su", "M", "T", "W", "Th", "F", "Sa"];

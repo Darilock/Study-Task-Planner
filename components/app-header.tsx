@@ -11,6 +11,7 @@ const ICONS = {
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", page: "dashboard" },
+  { href: "/calendar", label: "Calendar", page: "calendar" },
   { href: "/classes", label: "Classes", page: "classes" },
   { href: "/grades", label: "Grades", page: "grades" },
 ] as const;

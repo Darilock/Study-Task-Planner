@@ -6,6 +6,7 @@ export type Task = {
   subject: string | null;
   due_date: string | null;
   estimated_minutes: number | null;
+  scheduled_for: string | null;
   status: TaskStatus;
   created_at: string;
 };

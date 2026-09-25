@@ -5,6 +5,7 @@ create table public.tasks (
   subject text,
   due_date date,
   estimated_minutes int,
+  scheduled_for date,
   status text not null default 'todo' check (status in ('todo', 'in_progress', 'done')),
   created_at timestamptz not null default now()
 );

@@ -1,12 +1,22 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { runTool, tools } from "@/lib/agent/tools";
 import { MAX_TASK_CHANGES_PER_REQUEST } from "@/lib/agent/validation";
 import { localDateInZone, resolveTimeZone } from "@/lib/agent/local-date";
-import { AGENT_INPUT_MAX_LENGTH, type AgentAction, type AgentResponse } from "@/lib/agent/types";
+import { parseHistory } from "@/lib/agent/history";
+import type { AgentAction, AgentResponse } from "@/lib/agent/types";
 
 const MAX_ITERATIONS = 12;
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
+
+/** Tasks show on the Calendar (and its This Week box), the Planner and Classes & Grades. */
+function revalidateChangedPages(actions: Map<string, AgentAction>) {
+  if (actions.size === 0) return;
+  revalidatePath("/calendar");
+  revalidatePath("/planner");
+  revalidatePath("/classes");
+}
 
 function json(body: AgentResponse, status = 200) {
   return Response.json(body, { status });
@@ -37,18 +47,16 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getClaims();
   if (!auth?.claims) return json({ error: "You need to be logged in." }, 401);
 
-  let body: { message?: unknown; timeZone?: unknown };
+  let body: { messages?: unknown; timeZone?: unknown };
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid request." }, 400);
   }
 
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) return json({ error: "Tell the planner what you need help with." }, 400);
-  if (message.length > AGENT_INPUT_MAX_LENGTH) {
-    return json({ error: `Keep your request under ${AGENT_INPUT_MAX_LENGTH} characters.` }, 400);
-  }
+  // The panel sends the recent conversation, ending with the new message.
+  const history = parseHistory(body.messages);
+  if ("error" in history) return json({ error: history.error }, 400);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("ANTHROPIC_API_KEY is not set");
@@ -61,7 +69,7 @@ export async function POST(request: Request) {
   const timeZone = resolveTimeZone(body.timeZone);
   const { date: today, weekday } = localDateInZone(new Date(), timeZone);
   const system = systemPrompt(today, weekday, timeZone);
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: message }];
+  const messages: Anthropic.MessageParam[] = history.messages.map((m) => ({ role: m.role, content: m.content }));
   const actions = new Map<string, AgentAction>();
   let summary = "";
 
@@ -109,6 +117,7 @@ export async function POST(request: Request) {
     }
   } catch (e) {
     console.error("Agent run failed", e);
+    revalidateChangedPages(actions);
     const partial = actions.size > 0 ? " Some changes may have been saved." : "";
     if (e instanceof Anthropic.RateLimitError) {
       return json({ error: `The planner is busy right now. Try again in a minute.${partial}` }, 429);
@@ -119,6 +128,7 @@ export async function POST(request: Request) {
     return json({ error: `Something went wrong while planning.${partial}` }, 500);
   }
 
+  revalidateChangedPages(actions);
   return json({
     summary: summary || "Done.",
     actions: [...actions.values()],

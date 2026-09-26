@@ -9,9 +9,9 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const nextParam = searchParams.get("next") ?? "/planner";
+  const nextParam = searchParams.get("next") ?? "/calendar";
   // Only allow same-site relative redirects.
-  const next = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/planner";
+  const next = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/calendar";
 
   const supabase = await createClient();
   let error: unknown = null;

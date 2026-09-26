@@ -10,8 +10,8 @@ const ICONS = {
 };
 
 const NAV = [
-  { href: "/planner", label: "Planner", page: "planner" },
   { href: "/calendar", label: "Calendar", page: "calendar" },
+  { href: "/planner", label: "Planner", page: "planner" },
   { href: "/classes", label: "Classes", page: "classes" },
   { href: "/grades", label: "Grades", page: "grades" },
 ] as const;

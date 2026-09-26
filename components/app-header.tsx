@@ -3,14 +3,14 @@ import { logout } from "@/app/auth/actions";
 
 // Simple 24px stroke icons for the phone tab bar.
 const ICONS = {
-  dashboard: <path d="M10 6h10M10 12h10M10 18h10M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17" />,
+  planner: <path d="M10 6h10M10 12h10M10 18h10M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17" />,
   classes: <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5v-15ZM5 19.5A1.5 1.5 0 0 0 6.5 21H19" />,
   grades: <path d="M5 20v-8M12 20V4M19 20v-5" />,
   calendar: <path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2ZM3 10h18M8 3v4M16 3v4" />,
 };
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", page: "dashboard" },
+  { href: "/planner", label: "Planner", page: "planner" },
   { href: "/calendar", label: "Calendar", page: "calendar" },
   { href: "/classes", label: "Classes", page: "classes" },
   { href: "/grades", label: "Grades", page: "grades" },

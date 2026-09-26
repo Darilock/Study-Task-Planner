@@ -15,8 +15,8 @@ import {
 import type { MeetingOccurrence } from "@/lib/calendar/recurrence";
 import { useLocalToday } from "@/lib/use-local-today";
 import type { Task } from "@/lib/types";
-import { AddTaskForm } from "../dashboard/add-task-form";
-import { TaskItem } from "../dashboard/task-item";
+import { AddTaskForm } from "../planner/add-task-form";
+import { TaskItem } from "../planner/task-item";
 import { AgendaView } from "./agenda-view";
 import { DayList } from "./day-list";
 import { FilterPanel } from "./filter-panel";

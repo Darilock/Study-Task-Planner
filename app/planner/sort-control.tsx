@@ -13,7 +13,7 @@ export function SortControl({ current }: { current: TaskSort }) {
           return (
             <Link
               key={sort}
-              href={sort === "due" ? "/dashboard" : `/dashboard?sort=${sort}`}
+              href={sort === "due" ? "/planner" : `/planner?sort=${sort}`}
               scroll={false}
               replace
               aria-current={active ? "true" : undefined}

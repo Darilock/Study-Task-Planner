@@ -1,4 +1,4 @@
-// Shared between the agent route and the dashboard panel.
+// Shared between the agent route and the planner panel.
 
 export const AGENT_INPUT_MAX_LENGTH = 1000;
 

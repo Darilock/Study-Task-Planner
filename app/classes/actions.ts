@@ -87,7 +87,7 @@ function revalidate() {
   revalidatePath("/classes");
   revalidatePath("/grades");
   // Tasks show their class's name and color.
-  revalidatePath("/dashboard");
+  revalidatePath("/planner");
   revalidatePath("/calendar");
 }
 

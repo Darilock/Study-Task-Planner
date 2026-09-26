@@ -2,7 +2,7 @@ import "server-only";
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { averagesByClass, GRADED_TASK_COLUMNS, type GradedTaskRow } from "@/lib/class-averages";
-import { RISK_THRESHOLDS, riskLevel } from "@/lib/grades";
+import { RISK_THRESHOLDS, riskLevel, TASK_TYPES } from "@/lib/grades";
 import { DAY_NAMES, formatSchedule } from "@/lib/schedule";
 import type { createClient } from "@/lib/supabase/server";
 import {
@@ -17,7 +17,7 @@ import {
   asDate,
   asObject,
   asUuid,
-  MAX_TASKS_PER_CALL,
+  MAX_TASK_CHANGES_PER_REQUEST,
   optional,
   parseCreateTasks,
   parseListTasks,
@@ -73,17 +73,17 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "create_tasks",
     description:
-      `Create between 1 and ${MAX_TASKS_PER_CALL} new tasks for the student. ` +
-      "Dates are YYYY-MM-DD. due_date is the deadline; scheduled_for is the day the student plans to work on it. " +
-      `priority defaults to "${DEFAULT_PRIORITY}"; reserve "extreme" for urgent, high-stakes work. ` +
-      "Check list_tasks first so you don't create duplicates.",
+      `Create between 1 and ${MAX_TASK_CHANGES_PER_REQUEST} new tasks. Dates are YYYY-MM-DD: due_date is the ` +
+      "deadline and scheduled_for is the day the student plans to work on it (today or later, and not after " +
+      "due_date). Graded work (a task_type) needs a class_id from list_classes; leave task_type out for ungraded " +
+      `study tasks. priority defaults to "${DEFAULT_PRIORITY}". Check list_tasks first so you don't create duplicates.`,
     input_schema: {
       type: "object",
       properties: {
         tasks: {
           type: "array",
           minItems: 1,
-          maxItems: MAX_TASKS_PER_CALL,
+          maxItems: MAX_TASK_CHANGES_PER_REQUEST,
           items: {
             type: "object",
             properties: {
@@ -92,18 +92,31 @@ export const tools: Anthropic.Tool[] = [
                 type: ["string", "null"],
                 description: `Optional details such as chapters, pages or instructions, max ${DESCRIPTION_MAX_LENGTH} characters.`,
               },
-              subject: { type: ["string", "null"], description: "Course or subject, max 100 characters." },
-              due_date: { type: ["string", "null"], description: "Deadline, YYYY-MM-DD." },
-              estimated_minutes: {
-                type: ["integer", "null"],
-                description: "Estimated effort in minutes, 1 to 10000.",
+              class_id: { type: ["string", "null"], description: "The task's class, an id from list_classes." },
+              task_type: {
+                type: ["string", "null"],
+                enum: [...TASK_TYPES, null],
+                description: "Graded work type. Leave null for ungraded study tasks. Requires class_id.",
               },
-              scheduled_for: { type: ["string", "null"], description: "Planned work day, YYYY-MM-DD." },
+              max_points: {
+                type: ["number", "null"],
+                description: "Points the graded work is out of, if known. Only for graded work.",
+              },
               priority: {
                 type: "string",
                 enum: [...PRIORITIES],
                 description: `How important the task is. Defaults to "${DEFAULT_PRIORITY}".`,
               },
+              due_date: { type: ["string", "null"], description: "Deadline, YYYY-MM-DD." },
+              scheduled_for: {
+                type: ["string", "null"],
+                description: "Planned work day, YYYY-MM-DD: today or later, and on or before due_date.",
+              },
+              estimated_minutes: {
+                type: ["integer", "null"],
+                description: "Estimated effort in minutes, 1 to 10000.",
+              },
+              subject: { type: ["string", "null"], description: "Free-text subject label, max 100 characters. Prefer class_id." },
             },
             required: ["title"],
             additionalProperties: false,
@@ -133,6 +146,9 @@ export const tools: Anthropic.Tool[] = [
 
 export type ToolResult = { content: string; isError: boolean };
 
+/** Per-request facts the tools need. `today` is the student's local date. */
+export type ToolContext = { today: string };
+
 /**
  * Validates and runs one tool call. Every query goes through the caller's
  * session-scoped Supabase client, so RLS limits it to the user's own rows.
@@ -143,6 +159,7 @@ export async function runTool(
   name: string,
   input: unknown,
   actions: Map<string, AgentAction>,
+  context: ToolContext,
 ): Promise<ToolResult> {
   try {
     switch (name) {
@@ -151,7 +168,7 @@ export async function runTool(
       case "list_tasks":
         return await listTasks(supabase, input);
       case "create_tasks":
-        return await createTasks(supabase, input, actions);
+        return await createTasks(supabase, input, actions, context.today);
       case "schedule_task":
         return await scheduleTask(supabase, input, actions);
       default:
@@ -280,8 +297,20 @@ async function createTasks(
   supabase: Supabase,
   input: unknown,
   actions: Map<string, AgentAction>,
+  today: string,
 ): Promise<ToolResult> {
-  const rows = parseCreateTasks(input);
+  const rows = parseCreateTasks(input, today);
+
+  // Friendlier than a foreign key error: say which class id is wrong.
+  const classIds = [...new Set(rows.map((r) => r.class_id).filter((id): id is string => id !== null))];
+  if (classIds.length > 0) {
+    const { data: found, error: classError } = await supabase.from("classes").select("id").in("id", classIds);
+    if (classError) return { content: "Couldn't check the classes.", isError: true };
+    const missing = classIds.filter((id) => !found.some((c) => c.id === id));
+    if (missing.length > 0) {
+      throw new ToolInputError(`Unknown class_id: ${missing.join(", ")}. Use ids from list_classes.`);
+    }
+  }
 
   // user_id is intentionally omitted: the column defaults to auth.uid().
   const { data, error } = await supabase.from("tasks").insert(rows).select(TASK_COLUMNS);

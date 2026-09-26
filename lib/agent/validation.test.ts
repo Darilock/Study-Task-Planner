@@ -42,13 +42,18 @@ describe("basic checks", () => {
   });
 });
 
+const TODAY = "2026-09-25";
+
 describe("parseCreateTasks", () => {
   test("fills defaults and nulls", () => {
-    assert.deepEqual(parseCreateTasks({ tasks: [{ title: "Read ch. 5" }] }), [
+    assert.deepEqual(parseCreateTasks({ tasks: [{ title: "Read ch. 5" }] }, TODAY), [
       {
         title: "Read ch. 5",
         description: null,
         subject: null,
+        class_id: null,
+        task_type: null,
+        max_points: null,
         due_date: null,
         estimated_minutes: null,
         scheduled_for: null,
@@ -57,11 +62,51 @@ describe("parseCreateTasks", () => {
     ]);
   });
 
-  test("rejects empty lists, bad fields and fields it can't set", () => {
-    rejects(() => parseCreateTasks({ tasks: [] }), /non-empty array/);
-    rejects(() => parseCreateTasks({ tasks: [{ title: "x", priority: "urgent" }] }), /priority must be one of/);
-    rejects(() => parseCreateTasks({ tasks: [{ title: "x", estimated_minutes: 0 }] }), /between 1 and 10000/);
-    rejects(() => parseCreateTasks({ tasks: [{ title: "x", status: "done" }] }), /unexpected fields: status/);
+  test("accepts a graded task with a class, and an ungraded study session for it", () => {
+    const [quiz, study] = parseCreateTasks(
+      {
+        tasks: [
+          { title: "Quiz 3", class_id: CLASS_ID, task_type: "quiz", max_points: 20, due_date: "2026-10-01", priority: "high" },
+          { title: "Study: Quiz 3", class_id: CLASS_ID, scheduled_for: "2026-09-29", due_date: "2026-10-01", estimated_minutes: 45 },
+        ],
+      },
+      TODAY,
+    );
+    assert.equal(quiz.task_type, "quiz");
+    assert.equal(quiz.max_points, 20);
+    assert.equal(study.task_type, null);
+    assert.equal(study.scheduled_for, "2026-09-29");
+  });
+
+  test("graded work needs a class, and only graded work has max points", () => {
+    rejects(() => parseCreateTasks({ tasks: [{ title: "Exam 1", task_type: "exam" }] }, TODAY), /needs a class_id/);
+    rejects(() => parseCreateTasks({ tasks: [{ title: "Read", max_points: 10 }] }, TODAY), /only for graded work/);
+    rejects(() => parseCreateTasks({ tasks: [{ title: "x", class_id: CLASS_ID, task_type: "midterm" }] }, TODAY), /task_type must be one of/);
+    rejects(() => parseCreateTasks({ tasks: [{ title: "x", class_id: CLASS_ID, task_type: "quiz", max_points: -5 }] }, TODAY), /above 0/);
+  });
+
+  test("never schedules in the past or after the due date", () => {
+    rejects(() => parseCreateTasks({ tasks: [{ title: "x", scheduled_for: "2026-09-24" }] }, TODAY), /can't be in the past/);
+    rejects(
+      () => parseCreateTasks({ tasks: [{ title: "x", due_date: "2026-09-28", scheduled_for: "2026-09-29" }] }, TODAY),
+      /on or before the due date/,
+    );
+    // Today itself and the due date itself are fine.
+    assert.equal(parseCreateTasks({ tasks: [{ title: "x", scheduled_for: TODAY }] }, TODAY)[0].scheduled_for, TODAY);
+    assert.equal(
+      parseCreateTasks({ tasks: [{ title: "x", due_date: "2026-09-28", scheduled_for: "2026-09-28" }] }, TODAY)[0].scheduled_for,
+      "2026-09-28",
+    );
+  });
+
+  test("rejects empty lists, too many tasks, bad fields and fields it can't set", () => {
+    rejects(() => parseCreateTasks({ tasks: [] }, TODAY), /non-empty array/);
+    const sixteen = Array.from({ length: 16 }, (_, i) => ({ title: `Task ${i}` }));
+    rejects(() => parseCreateTasks({ tasks: sixteen }, TODAY), /at most 15/);
+    rejects(() => parseCreateTasks({ tasks: [{ title: "x", priority: "urgent" }] }, TODAY), /priority must be one of/);
+    rejects(() => parseCreateTasks({ tasks: [{ title: "x", estimated_minutes: 0 }] }, TODAY), /between 1 and 10000/);
+    rejects(() => parseCreateTasks({ tasks: [{ title: "x", status: "done" }] }, TODAY), /unexpected fields: status/);
+    rejects(() => parseCreateTasks({ tasks: [{ title: "x", score: 20 }] }, TODAY), /unexpected fields: score/);
   });
 });
 

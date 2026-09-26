@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type !== "tool_use") continue;
-        const result = await runTool(supabase, block.name, block.input, actions);
+        const result = await runTool(supabase, block.name, block.input, actions, { today });
         results.push({
           type: "tool_result",
           tool_use_id: block.id,

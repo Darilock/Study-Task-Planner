@@ -194,9 +194,9 @@ describe("the 15-task cap per request", () => {
 
   test("is 15 tasks created or updated, combined", () => {
     assert.equal(MAX_TASK_CHANGES_PER_REQUEST, 15);
-    checkChangeCap(ids(0), { newTasks: 15 });
-    checkChangeCap(ids(10), { newTasks: 5 });
-    rejects(() => checkChangeCap(ids(10), { newTasks: 6 }), /at most 15 tasks in total, and 5 are left/);
+    checkChangeCap(ids(0), { newItems: 15 });
+    checkChangeCap(ids(10), { newItems: 5 });
+    rejects(() => checkChangeCap(ids(10), { newItems: 6 }), /at most 15 tasks and classes in total, and 5 are left/);
   });
 
   test("updating a new task counts once; updating the same task again is free", () => {

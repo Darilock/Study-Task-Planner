@@ -309,7 +309,7 @@ async function createTasks(
   today: string,
 ): Promise<ToolResult> {
   const rows = parseCreateTasks(input, today);
-  checkChangeCap(new Set(actions.keys()), { newTasks: rows.length });
+  checkChangeCap(new Set(actions.keys()), { newItems: rows.length });
 
   // Friendlier than a foreign key error: say which class id is wrong.
   const classNames = new Map<string, string>();

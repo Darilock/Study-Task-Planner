@@ -110,3 +110,30 @@ export function parseCreateTasks(input: unknown): NewTaskRow[] {
     };
   });
 }
+
+export const TASK_STATUS_FILTERS = ["open", "todo", "in_progress", "done", "all"] as const;
+export type TaskStatusFilter = (typeof TASK_STATUS_FILTERS)[number];
+
+export type ListTasksFilter = {
+  /** Tasks due or scheduled on or after this date. */
+  from: string | null;
+  /** Tasks due or scheduled on or before this date. */
+  to: string | null;
+  /** A class id, "none" for tasks without a class, or null for any. */
+  classId: string | null;
+  status: TaskStatusFilter;
+};
+
+/** Validates list_tasks input. Status defaults to "open" (everything not done). */
+export function parseListTasks(input: unknown): ListTasksFilter {
+  const obj = asObject(input ?? {}, ["from", "to", "class_id", "status"]);
+  const from = optional(obj.from, (v) => asDate(v, "from"));
+  const to = optional(obj.to, (v) => asDate(v, "to"));
+  if (from && to && to < from) throw new ToolInputError("to must be on or after from.");
+  const classId = optional(obj.class_id, (v) => (v === "none" ? "none" : asUuid(v, "class_id", "list_classes")));
+  const status = obj.status === undefined || obj.status === null ? "open" : obj.status;
+  if (!(TASK_STATUS_FILTERS as readonly unknown[]).includes(status)) {
+    throw new ToolInputError(`status must be one of: ${TASK_STATUS_FILTERS.join(", ")}.`);
+  }
+  return { from, to, classId, status: status as TaskStatusFilter };
+}

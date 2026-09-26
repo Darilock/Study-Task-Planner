@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { asDate, asObject, asString, asUuid, parseCreateTasks, ToolInputError } from "./validation.ts";
+import {
+  asDate,
+  asObject,
+  asString,
+  asUuid,
+  parseCreateTasks,
+  parseListTasks,
+  ToolInputError,
+} from "./validation.ts";
+
+const CLASS_ID = "0b0f8e2c-3c55-4b8e-9a39-2b1d7a5f6c11";
 
 const rejects = (fn: () => unknown, message: RegExp) =>
   assert.throws(fn, (e: unknown) => e instanceof ToolInputError && message.test(e.message));
@@ -52,5 +62,29 @@ describe("parseCreateTasks", () => {
     rejects(() => parseCreateTasks({ tasks: [{ title: "x", priority: "urgent" }] }), /priority must be one of/);
     rejects(() => parseCreateTasks({ tasks: [{ title: "x", estimated_minutes: 0 }] }), /between 1 and 10000/);
     rejects(() => parseCreateTasks({ tasks: [{ title: "x", status: "done" }] }), /unexpected fields: status/);
+  });
+});
+
+describe("parseListTasks", () => {
+  test("defaults to open tasks with no other filters", () => {
+    assert.deepEqual(parseListTasks({}), { from: null, to: null, classId: null, status: "open" });
+    assert.deepEqual(parseListTasks(undefined), { from: null, to: null, classId: null, status: "open" });
+  });
+
+  test("accepts a date range, a class or no class, and a status", () => {
+    assert.deepEqual(parseListTasks({ from: "2026-09-27", to: "2026-10-03", class_id: CLASS_ID, status: "all" }), {
+      from: "2026-09-27",
+      to: "2026-10-03",
+      classId: CLASS_ID,
+      status: "all",
+    });
+    assert.equal(parseListTasks({ class_id: "none" }).classId, "none");
+  });
+
+  test("rejects backwards ranges, bad ids and unknown statuses", () => {
+    rejects(() => parseListTasks({ from: "2026-10-03", to: "2026-09-27" }), /on or after from/);
+    rejects(() => parseListTasks({ class_id: "Biology" }), /id from list_classes/);
+    rejects(() => parseListTasks({ status: "overdue" }), /status must be one of/);
+    rejects(() => parseListTasks({ include_done: true }), /unexpected fields/);
   });
 });

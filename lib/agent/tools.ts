@@ -14,19 +14,21 @@ import {
 } from "@/lib/types";
 import type { AgentAction } from "./types";
 import {
-  asBoolean,
   asDate,
   asObject,
   asUuid,
   MAX_TASKS_PER_CALL,
   optional,
   parseCreateTasks,
+  parseListTasks,
+  TASK_STATUS_FILTERS,
   ToolInputError,
 } from "./validation";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-const TASK_COLUMNS = "id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, status";
+const TASK_COLUMNS =
+  "id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, status, class_id, task_type, graded_at";
 
 export const tools: Anthropic.Tool[] = [
   {
@@ -40,15 +42,29 @@ export const tools: Anthropic.Tool[] = [
   {
     name: "list_tasks",
     description:
-      "List the student's tasks with their id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, and status. " +
-      "Call this before scheduling so you know which tasks exist and what is already planned. " +
-      "Completed tasks are excluded unless include_done is true.",
+      "List the student's tasks. Each has id, title, description, task_type (null means an ungraded study task), " +
+      "is_graded_type, has_grade, priority, class_id, class_name, due_date, scheduled_for (the day planned to work on " +
+      "it), estimated_minutes and status. By default returns every task that isn't done. Call this before creating or " +
+      "moving tasks so you don't make duplicates and can plan around what's already scheduled.",
     input_schema: {
       type: "object",
       properties: {
-        include_done: {
-          type: "boolean",
-          description: "Also return tasks marked done. Defaults to false.",
+        from: {
+          type: ["string", "null"],
+          description: "Only tasks due or scheduled on or after this date, YYYY-MM-DD.",
+        },
+        to: {
+          type: ["string", "null"],
+          description: "Only tasks due or scheduled on or before this date, YYYY-MM-DD.",
+        },
+        class_id: {
+          type: ["string", "null"],
+          description: 'Only tasks in this class (an id from list_classes), or "none" for tasks without a class.',
+        },
+        status: {
+          type: "string",
+          enum: [...TASK_STATUS_FILTERS],
+          description: '"open" (default) is everything not done; "all" includes done tasks.',
         },
       },
       additionalProperties: false,
@@ -207,20 +223,57 @@ function minutesBetween(start: string, end: string) {
 }
 
 async function listTasks(supabase: Supabase, input: unknown): Promise<ToolResult> {
-  const obj = asObject(input, ["include_done"]);
-  const includeDone = obj.include_done === undefined ? false : asBoolean(obj.include_done, "include_done");
+  const filter = parseListTasks(input);
+  const limit = 200;
 
   let query = supabase
     .from("tasks")
     .select(TASK_COLUMNS)
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true })
-    .limit(200);
-  if (!includeDone) query = query.neq("status", "done");
+    .limit(limit);
+  // Dates are validated YYYY-MM-DD strings, so they're safe inside these filters.
+  const { from, to } = filter;
+  if (from && to) {
+    query = query.or(
+      `and(due_date.gte.${from},due_date.lte.${to}),and(scheduled_for.gte.${from},scheduled_for.lte.${to})`,
+    );
+  } else if (from) {
+    query = query.or(`due_date.gte.${from},scheduled_for.gte.${from}`);
+  } else if (to) {
+    query = query.or(`due_date.lte.${to},scheduled_for.lte.${to}`);
+  }
+  if (filter.classId === "none") query = query.is("class_id", null);
+  else if (filter.classId) query = query.eq("class_id", filter.classId);
+  if (filter.status === "open") query = query.neq("status", "done");
+  else if (filter.status !== "all") query = query.eq("status", filter.status);
 
-  const { data, error } = await query;
-  if (error) return { content: "Couldn't load tasks.", isError: true };
-  return { content: JSON.stringify(data), isError: false };
+  const [{ data, error }, { data: classes, error: classError }] = await Promise.all([
+    query,
+    supabase.from("classes").select("id, name"),
+  ]);
+  if (error || classError) return { content: "Couldn't load tasks.", isError: true };
+
+  const classNames = new Map((classes ?? []).map((c) => [c.id, c.name]));
+  const tasks = data.map((t) => ({
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    task_type: t.task_type,
+    is_graded_type: t.task_type !== null,
+    has_grade: t.graded_at !== null,
+    priority: t.priority,
+    class_id: t.class_id,
+    class_name: t.class_id ? (classNames.get(t.class_id) ?? null) : null,
+    due_date: t.due_date,
+    scheduled_for: t.scheduled_for,
+    estimated_minutes: t.estimated_minutes,
+    status: t.status,
+  }));
+  return {
+    content: JSON.stringify({ tasks, ...(tasks.length === limit && { note: `Only the first ${limit} are shown; narrow the filters.` }) }),
+    isError: false,
+  };
 }
 
 async function createTasks(

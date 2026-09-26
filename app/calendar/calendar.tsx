@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CALENDAR_VIEWS,
   eachDateKey,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/calendar/dates";
 import type { MeetingOccurrence } from "@/lib/calendar/recurrence";
 import { useLocalToday } from "@/lib/use-local-today";
+import { useStoredValue } from "@/lib/use-stored-value";
 import type { Task } from "@/lib/types";
 import { AddTaskForm } from "../planner/add-task-form";
 import { TaskItem } from "../planner/task-item";
@@ -26,22 +27,6 @@ import { Sheet } from "./sheet";
 import { WeekView } from "./week-view";
 
 const FILTER_STORAGE_KEY = "calendar-filter";
-const filterListeners = new Set<() => void>();
-// Used when localStorage is unavailable (private windows, blocked site data).
-let filterInMemory: string | null = null;
-
-function subscribeToFilter(listener: () => void) {
-  filterListeners.add(listener);
-  return () => filterListeners.delete(listener);
-}
-
-function readStoredFilter(): string | null {
-  try {
-    return localStorage.getItem(FILTER_STORAGE_KEY) ?? filterInMemory;
-  } catch {
-    return filterInMemory;
-  }
-}
 
 function parseFilter(raw: string | null): CalendarFilter {
   try {
@@ -56,27 +41,6 @@ function parseFilter(raw: string | null): CalendarFilter {
     // Fall through to the default.
   }
   return DEFAULT_FILTER;
-}
-
-/**
- * The filter, remembered in this browser only. The server render (and the
- * first client render) use the default, so hydration always matches.
- */
-function useStoredFilter() {
-  const raw = useSyncExternalStore(subscribeToFilter, readStoredFilter, () => null);
-  const filter = useMemo(() => parseFilter(raw), [raw]);
-
-  function update(next: CalendarFilter) {
-    filterInMemory = JSON.stringify(next);
-    try {
-      localStorage.setItem(FILTER_STORAGE_KEY, filterInMemory);
-    } catch {
-      // Still applied for this visit via filterInMemory.
-    }
-    filterListeners.forEach((listener) => listener());
-  }
-
-  return [filter, update] as const;
 }
 
 const VIEW_LABELS: Record<CalendarView, string> = { month: "Month", week: "Week", agenda: "Agenda" };
@@ -103,7 +67,7 @@ type Props = {
 export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classes }: Props) {
   const router = useRouter();
   const today = useLocalToday();
-  const [filter, setFilter] = useStoredFilter();
+  const [filter, setFilter] = useStoredValue(FILTER_STORAGE_KEY, parseFilter);
   const [filterOpen, setFilterOpen] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [addingTask, setAddingTask] = useState(false);

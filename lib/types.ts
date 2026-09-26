@@ -7,6 +7,14 @@ export const PRIORITIES = ["low", "medium", "high", "extreme"] as const;
 export type TaskPriority = (typeof PRIORITIES)[number];
 export const DEFAULT_PRIORITY: TaskPriority = "medium";
 
+/** Display names for priorities. */
+export const PRIORITY_NAMES: Record<TaskPriority, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  extreme: "Extreme",
+};
+
 export function isPriority(value: unknown): value is TaskPriority {
   return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value);
 }

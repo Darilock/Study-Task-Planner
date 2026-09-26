@@ -199,3 +199,74 @@ export function parseListTasks(input: unknown): ListTasksFilter {
   }
   return { from, to, classId, status: status as TaskStatusFilter };
 }
+
+/** The only fields update_task may change. Grades, status, type and class are off limits. */
+export const UPDATABLE_FIELDS = ["priority", "description", "due_date", "scheduled_for", "estimated_minutes"] as const;
+export type UpdatableField = (typeof UPDATABLE_FIELDS)[number];
+
+export type TaskUpdate = {
+  priority?: TaskPriority;
+  description?: string | null;
+  due_date?: string | null;
+  scheduled_for?: string | null;
+  estimated_minutes?: number | null;
+};
+
+/** Validates update_task input. Null clears a field (except priority); at least one field must be given. */
+export function parseUpdateTask(input: unknown): { id: string; update: TaskUpdate } {
+  const obj = asObject(input, ["id", ...UPDATABLE_FIELDS]);
+  const id = asUuid(obj.id, "id", "list_tasks or create_tasks");
+  const update: TaskUpdate = {};
+  if (obj.priority !== undefined) update.priority = asPriority(obj.priority, "priority");
+  if (obj.description !== undefined) {
+    update.description = optional(obj.description, (v) => asString(v, "description", DESCRIPTION_MAX_LENGTH));
+  }
+  if (obj.due_date !== undefined) update.due_date = optional(obj.due_date, (v) => asDate(v, "due_date"));
+  if (obj.scheduled_for !== undefined) update.scheduled_for = optional(obj.scheduled_for, (v) => asDate(v, "scheduled_for"));
+  if (obj.estimated_minutes !== undefined) {
+    update.estimated_minutes = optional(obj.estimated_minutes, (v) => asMinutes(v, "estimated_minutes"));
+  }
+  if (Object.keys(update).length === 0) {
+    throw new ToolInputError(`Give at least one field to change: ${UPDATABLE_FIELDS.join(", ")}.`);
+  }
+  return { id, update };
+}
+
+/**
+ * Checks an update against the task it changes. Completed tasks are never
+ * touched. A new study day follows checkScheduledFor; moving the due date
+ * earlier than an existing study day must move the study day too. An
+ * existing study day that's already past is left alone when it isn't changing.
+ */
+export function checkTaskUpdate(
+  existing: { status: string; due_date: string | null; scheduled_for: string | null },
+  update: TaskUpdate,
+  today: string,
+) {
+  if (existing.status === "done") {
+    throw new ToolInputError("That task is completed, and completed tasks can't be changed.");
+  }
+  const dueDate = update.due_date !== undefined ? update.due_date : existing.due_date;
+  if (update.scheduled_for !== undefined) {
+    checkScheduledFor(update.scheduled_for, dueDate, today, "scheduled_for");
+  } else if (update.due_date !== undefined && existing.scheduled_for && dueDate && existing.scheduled_for > dueDate) {
+    throw new ToolInputError(
+      `The task is planned for ${existing.scheduled_for}, after the new due date ${dueDate}. Move scheduled_for too.`,
+    );
+  }
+}
+
+/**
+ * Enforces MAX_TASK_CHANGES_PER_REQUEST across the whole request. `touched`
+ * holds the ids already created or updated; updating one of those again is free.
+ */
+export function checkChangeCap(touched: ReadonlySet<string>, change: { newTasks: number } | { taskId: string }) {
+  const adding = "newTasks" in change ? change.newTasks : touched.has(change.taskId) ? 0 : 1;
+  if (touched.size + adding > MAX_TASK_CHANGES_PER_REQUEST) {
+    const left = MAX_TASK_CHANGES_PER_REQUEST - touched.size;
+    throw new ToolInputError(
+      `One request can create or update at most ${MAX_TASK_CHANGES_PER_REQUEST} tasks in total, and ${left} ` +
+        `${left === 1 ? "is" : "are"} left. Do the most important ones and tell the student what's left for next time.`,
+    );
+  }
+}

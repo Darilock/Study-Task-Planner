@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { differenceInCalendarDays } from "date-fns";
-import { formatDateKey, parseLocalDate, toDateKey } from "@/lib/calendar/dates";
+import { toDateKey } from "@/lib/calendar/dates";
+import { describeAction } from "@/lib/agent/describe-actions";
 import {
   AGENT_INPUT_MAX_LENGTH,
   type AgentAction,
@@ -14,22 +14,6 @@ type Result = { summary: string; actions: AgentAction[] };
 
 const localToday = () => toDateKey(new Date());
 
-/** "today", "tomorrow", "Thu" within the week, otherwise "Thu, Oct 8". Dates are local calendar dates. */
-function describeDay(date: string, today: string) {
-  const days = differenceInCalendarDays(parseLocalDate(date), parseLocalDate(today));
-  if (days === 0) return "today";
-  if (days === 1) return "tomorrow";
-  if (days > 1 && days < 7) return formatDateKey(date, "EEE");
-  return formatDateKey(date, "EEE, MMM d");
-}
-
-function describeAction(action: AgentAction, today: string) {
-  const day = action.scheduledFor ? describeDay(action.scheduledFor, today) : null;
-  if (action.kind === "created") {
-    return `Created: ${action.title}${day ? `, scheduled ${day}` : ""}`;
-  }
-  return day ? `Scheduled: ${action.title} for ${day}` : `Unscheduled: ${action.title}`;
-}
 
 export function AgentPanel() {
   const router = useRouter();
@@ -151,14 +135,16 @@ export function AgentPanel() {
             <p className="whitespace-pre-line break-words">{result.summary}</p>
             {result.actions.length > 0 && (
               <ul className="flex flex-col gap-1 text-zinc-600 dark:text-zinc-400">
-                {result.actions.map((action) => (
-                  <li key={action.taskId} className="flex gap-2 break-words">
-                    <span aria-hidden className="text-emerald-600 dark:text-emerald-400">
-                      ✓
-                    </span>
-                    <span className="min-w-0">{describeAction(action, today)}</span>
-                  </li>
-                ))}
+                {result.actions.flatMap((action) =>
+                  describeAction(action, today).map((line, i) => (
+                    <li key={`${action.taskId}-${i}`} className="flex gap-2 break-words">
+                      <span aria-hidden className="text-emerald-600 dark:text-emerald-400">
+                        ✓
+                      </span>
+                      <span className="min-w-0">{line}</span>
+                    </li>
+                  )),
+                )}
               </ul>
             )}
           </div>

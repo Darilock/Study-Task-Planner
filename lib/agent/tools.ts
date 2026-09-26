@@ -14,15 +14,16 @@ import {
 } from "@/lib/types";
 import type { AgentAction } from "./types";
 import {
-  asDate,
   asObject,
-  asUuid,
+  checkChangeCap,
+  checkTaskUpdate,
   MAX_TASK_CHANGES_PER_REQUEST,
-  optional,
   parseCreateTasks,
+  parseUpdateTask,
   parseListTasks,
   TASK_STATUS_FILTERS,
   ToolInputError,
+  type UpdatableField,
 } from "./validation";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -128,17 +129,25 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
-    name: "schedule_task",
+    name: "update_task",
     description:
-      "Set the day an existing task is planned to be worked on. Use an id returned by list_tasks or create_tasks. " +
-      "Pass scheduled_for as null to unschedule.",
+      "Change an existing task that isn't completed: its priority, description, due_date, scheduled_for (the planned " +
+      "work day) or estimated_minutes. Only include the fields to change; null clears a field. It can't change " +
+      "grades, status, type or class, and completed tasks can't be changed. Use an id from list_tasks or create_tasks.",
     input_schema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "The task id (UUID)." },
-        scheduled_for: { type: ["string", "null"], description: "Planned work day, YYYY-MM-DD." },
+        id: { type: "string", description: "The task id." },
+        priority: { type: "string", enum: [...PRIORITIES] },
+        description: { type: ["string", "null"], description: `Max ${DESCRIPTION_MAX_LENGTH} characters.` },
+        due_date: { type: ["string", "null"], description: "New deadline, YYYY-MM-DD." },
+        scheduled_for: {
+          type: ["string", "null"],
+          description: "New planned work day, YYYY-MM-DD: today or later, and on or before the due date.",
+        },
+        estimated_minutes: { type: ["integer", "null"], description: "1 to 10000." },
       },
-      required: ["id", "scheduled_for"],
+      required: ["id"],
       additionalProperties: false,
     },
   },
@@ -169,8 +178,8 @@ export async function runTool(
         return await listTasks(supabase, input);
       case "create_tasks":
         return await createTasks(supabase, input, actions, context.today);
-      case "schedule_task":
-        return await scheduleTask(supabase, input, actions);
+      case "update_task":
+        return await updateTask(supabase, input, actions, context.today);
       default:
         return { content: `Unknown tool: ${name}`, isError: true };
     }
@@ -300,16 +309,19 @@ async function createTasks(
   today: string,
 ): Promise<ToolResult> {
   const rows = parseCreateTasks(input, today);
+  checkChangeCap(new Set(actions.keys()), { newTasks: rows.length });
 
   // Friendlier than a foreign key error: say which class id is wrong.
+  const classNames = new Map<string, string>();
   const classIds = [...new Set(rows.map((r) => r.class_id).filter((id): id is string => id !== null))];
   if (classIds.length > 0) {
-    const { data: found, error: classError } = await supabase.from("classes").select("id").in("id", classIds);
+    const { data: found, error: classError } = await supabase.from("classes").select("id, name").in("id", classIds);
     if (classError) return { content: "Couldn't check the classes.", isError: true };
     const missing = classIds.filter((id) => !found.some((c) => c.id === id));
     if (missing.length > 0) {
       throw new ToolInputError(`Unknown class_id: ${missing.join(", ")}. Use ids from list_classes.`);
     }
+    for (const c of found) classNames.set(c.id, c.name);
   }
 
   // user_id is intentionally omitted: the column defaults to auth.uid().
@@ -321,38 +333,68 @@ async function createTasks(
       kind: "created",
       taskId: task.id,
       title: task.title,
+      className: task.class_id ? (classNames.get(task.class_id) ?? null) : null,
+      dueDate: task.due_date,
       scheduledFor: task.scheduled_for,
     });
   }
   return { content: JSON.stringify({ created: data }), isError: false };
 }
 
-async function scheduleTask(
+async function updateTask(
   supabase: Supabase,
   input: unknown,
   actions: Map<string, AgentAction>,
+  today: string,
 ): Promise<ToolResult> {
-  const obj = asObject(input, ["id", "scheduled_for"]);
-  const id = asUuid(obj.id, "id", "list_tasks");
-  if (obj.scheduled_for === undefined) throw new ToolInputError("scheduled_for is required (use null to unschedule).");
-  const scheduledFor = optional(obj.scheduled_for, (v) => asDate(v, "scheduled_for"));
+  const { id, update } = parseUpdateTask(input);
+  checkChangeCap(new Set(actions.keys()), { taskId: id });
 
+  const { data: existing, error: loadError } = await supabase
+    .from("tasks")
+    .select("id, title, status, class_id, priority, description, due_date, scheduled_for, estimated_minutes")
+    .eq("id", id)
+    .maybeSingle();
+  if (loadError) return { content: "Couldn't load the task.", isError: true };
+  if (!existing) return { content: `No task found with id ${id}. Use ids from list_tasks.`, isError: true };
+  checkTaskUpdate(existing, update, today);
+
+  // The status filter repeats the completed-task check in the database.
   const { data, error } = await supabase
     .from("tasks")
-    .update({ scheduled_for: scheduledFor })
+    .update(update)
     .eq("id", id)
+    .neq("status", "done")
     .select(TASK_COLUMNS)
     .maybeSingle();
-  if (error) return { content: "Couldn't schedule the task.", isError: true };
-  if (!data) return { content: `No task found with id ${id}.`, isError: true };
+  if (error) return { content: "Couldn't update the task.", isError: true };
+  if (!data) return { content: "That task is completed, and completed tasks can't be changed.", isError: true };
 
-  // A task created earlier in this run stays "created", just with the new date.
-  const existing = actions.get(data.id);
-  actions.set(data.id, {
-    kind: existing?.kind ?? "scheduled",
-    taskId: data.id,
-    title: data.title,
-    scheduledFor: data.scheduled_for,
-  });
+  const className = await classNameOf(supabase, data.class_id);
+  const previous = actions.get(id);
+  if (previous?.kind === "created") {
+    // A task made earlier in this request is still reported as created, with its final dates.
+    actions.set(id, { ...previous, title: data.title, dueDate: data.due_date, scheduledFor: data.scheduled_for });
+  } else {
+    // Record each field's original value, even if it changes twice in one request.
+    const changes = new Map((previous?.kind === "updated" ? previous.changes : []).map((c) => [c.field, c]));
+    for (const field of Object.keys(update) as UpdatableField[]) {
+      const before = changes.get(field)?.from ?? existing[field];
+      changes.set(field, { field, from: before, to: data[field] });
+    }
+    actions.set(id, {
+      kind: "updated",
+      taskId: id,
+      title: data.title,
+      className,
+      changes: [...changes.values()].filter((c) => c.from !== c.to),
+    });
+  }
   return { content: JSON.stringify({ updated: data }), isError: false };
+}
+
+async function classNameOf(supabase: Supabase, classId: string | null) {
+  if (!classId) return null;
+  const { data } = await supabase.from("classes").select("name").eq("id", classId).maybeSingle();
+  return data?.name ?? null;
 }

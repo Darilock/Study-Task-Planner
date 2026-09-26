@@ -4,7 +4,7 @@ import { runTool, tools } from "@/lib/agent/tools";
 import { localDateInZone, resolveTimeZone } from "@/lib/agent/local-date";
 import { AGENT_INPUT_MAX_LENGTH, type AgentAction, type AgentResponse } from "@/lib/agent/types";
 
-const MAX_ITERATIONS = 8;
+const MAX_ITERATIONS = 12;
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
 
 function json(body: AgentResponse, status = 200) {
@@ -18,7 +18,7 @@ Today is ${weekday}, ${today} (the student's time zone is ${timeZone}). Resolve 
 
 How to work:
 - Call list_tasks first to see what already exists, so you don't create duplicates and can plan around existing work.
-- Use create_tasks to add new tasks and schedule_task to plan existing ones. scheduled_for is the day the student will work on a task; it should be on or before the task's due_date and not in the past.
+- Use create_tasks to add new tasks and update_task to plan existing ones. scheduled_for is the day the student will work on a task; it should be on or before the task's due_date and not in the past.
 - Set each new task's priority (low, medium, high, extreme) from how urgent and important it is; use extreme sparingly. Add a short description when the student gives useful detail such as chapters, pages or instructions.
 - Spread work out so no single day is overloaded, and leave a buffer before deadlines when you can.
 - You cannot delete tasks. If asked to, say so and suggest the student delete them from the list.

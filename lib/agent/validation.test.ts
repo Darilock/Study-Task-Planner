@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   asDate,
+  checkChangeCap,
+  checkTaskUpdate,
+  MAX_TASK_CHANGES_PER_REQUEST,
   asObject,
   asString,
   asUuid,
   parseCreateTasks,
   parseListTasks,
+  parseUpdateTask,
   ToolInputError,
 } from "./validation.ts";
 
@@ -131,5 +135,73 @@ describe("parseListTasks", () => {
     rejects(() => parseListTasks({ class_id: "Biology" }), /id from list_classes/);
     rejects(() => parseListTasks({ status: "overdue" }), /status must be one of/);
     rejects(() => parseListTasks({ include_done: true }), /unexpected fields/);
+  });
+});
+
+const TASK_ID = "5d9c7a1e-8f2b-4c3d-9e4f-1a2b3c4d5e6f";
+
+describe("parseUpdateTask", () => {
+  test("takes only the fields it may change", () => {
+    assert.deepEqual(parseUpdateTask({ id: TASK_ID, scheduled_for: "2026-09-30", priority: "high" }), {
+      id: TASK_ID,
+      update: { scheduled_for: "2026-09-30", priority: "high" },
+    });
+    // null clears a field.
+    assert.deepEqual(parseUpdateTask({ id: TASK_ID, scheduled_for: null }).update, { scheduled_for: null });
+  });
+
+  test("can never touch grades, status, type or class", () => {
+    for (const field of ["score", "letter_grade", "graded_at", "status", "task_type", "class_id", "max_points", "title"]) {
+      rejects(() => parseUpdateTask({ id: TASK_ID, [field]: "x" }), new RegExp(`unexpected fields: ${field}`));
+    }
+  });
+
+  test("needs an id and at least one change", () => {
+    rejects(() => parseUpdateTask({ scheduled_for: "2026-09-30" }), /id must be an id/);
+    rejects(() => parseUpdateTask({ id: TASK_ID }), /at least one field/);
+    rejects(() => parseUpdateTask({ id: TASK_ID, priority: null }), /priority must be one of/);
+  });
+});
+
+describe("checkTaskUpdate", () => {
+  const open = { status: "todo", due_date: "2026-10-01", scheduled_for: null };
+
+  test("completed tasks are never changed", () => {
+    rejects(() => checkTaskUpdate({ ...open, status: "done" }, { priority: "low" }, TODAY), /completed tasks can't be changed/);
+  });
+
+  test("a new study day must be today or later and not after the due date", () => {
+    checkTaskUpdate(open, { scheduled_for: "2026-09-30" }, TODAY);
+    rejects(() => checkTaskUpdate(open, { scheduled_for: "2026-09-20" }, TODAY), /can't be in the past/);
+    rejects(() => checkTaskUpdate(open, { scheduled_for: "2026-10-02" }, TODAY), /on or before the due date/);
+    // Checked against the new due date when both change.
+    checkTaskUpdate(open, { due_date: "2026-10-05", scheduled_for: "2026-10-04" }, TODAY);
+  });
+
+  test("moving the due date before the planned day needs the planned day moved too", () => {
+    const planned = { ...open, scheduled_for: "2026-09-30" };
+    rejects(() => checkTaskUpdate(planned, { due_date: "2026-09-29" }, TODAY), /Move scheduled_for too/);
+    checkTaskUpdate(planned, { due_date: "2026-09-29", scheduled_for: "2026-09-28" }, TODAY);
+  });
+
+  test("an old planned day doesn't block unrelated changes", () => {
+    checkTaskUpdate({ ...open, scheduled_for: "2026-09-01" }, { priority: "extreme" }, TODAY);
+  });
+});
+
+describe("the 15-task cap per request", () => {
+  const ids = (n: number) => new Set(Array.from({ length: n }, (_, i) => `task-${i}`));
+
+  test("is 15 tasks created or updated, combined", () => {
+    assert.equal(MAX_TASK_CHANGES_PER_REQUEST, 15);
+    checkChangeCap(ids(0), { newTasks: 15 });
+    checkChangeCap(ids(10), { newTasks: 5 });
+    rejects(() => checkChangeCap(ids(10), { newTasks: 6 }), /at most 15 tasks in total, and 5 are left/);
+  });
+
+  test("updating a new task counts once; updating the same task again is free", () => {
+    checkChangeCap(ids(14), { taskId: "another" });
+    rejects(() => checkChangeCap(ids(15), { taskId: "another" }), /0 are left/);
+    checkChangeCap(ids(15), { taskId: "task-3" });
   });
 });

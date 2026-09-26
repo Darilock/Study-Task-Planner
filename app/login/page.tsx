@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Log in" };
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
-  if (data?.claims) redirect("/dashboard");
+  if (data?.claims) redirect("/calendar");
 
   const { error } = await searchParams;
   return (

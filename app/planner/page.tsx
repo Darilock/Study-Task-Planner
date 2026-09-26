@@ -9,9 +9,9 @@ import { AgentPanel } from "./agent-panel";
 import { SortControl } from "./sort-control";
 import { TaskItem } from "./task-item";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export const metadata: Metadata = { title: "Planner" };
 
-export default async function DashboardPage({
+export default async function PlannerPage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -40,7 +40,7 @@ export default async function DashboardPage({
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
-      <AppHeader current="dashboard" email={auth.claims.email} />
+      <AppHeader current="planner" email={auth.claims.email} />
 
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 app-main px-4 py-6">
         <h1 className="sr-only">My tasks</h1>

@@ -5,7 +5,7 @@ import { TASK_TYPE_LABELS, type TaskType } from "@/lib/grades";
 import type { MeetingOccurrence } from "@/lib/calendar/recurrence";
 import { formatTimeRange } from "@/lib/schedule";
 import type { Task } from "@/lib/types";
-import { PRIORITY_LABELS, PriorityBadge } from "../dashboard/priority-badge";
+import { PRIORITY_LABELS, PriorityBadge } from "../planner/priority-badge";
 import type { CalendarClass } from "./items";
 
 const NO_CLASS_COLOR = "#71717a";

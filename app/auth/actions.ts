@@ -26,7 +26,7 @@ export async function login(
   if (error) return { error: error.message };
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/calendar");
 }
 
 export async function signup(
@@ -46,14 +46,14 @@ export async function signup(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     ...creds,
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/dashboard` },
+    options: { emailRedirectTo: `${origin}/auth/callback?next=/calendar` },
   });
   if (error) return { error: error.message };
 
   // Email confirmation disabled in the project: the user is signed in already.
   if (data.session) {
     revalidatePath("/", "layout");
-    redirect("/dashboard");
+    redirect("/calendar");
   }
 
   return { message: "Check your email for a confirmation link to finish signing up." };

@@ -4,12 +4,22 @@ A task planner for students. Sign up, add assignments, readings and revision ses
 
 A built-in study planner agent can do the planning for you. Describe your coursework in plain language ("I have a lab report due Friday and two chapters to read before Tuesday") and it breaks the work into tasks and spreads them across the days before each deadline.
 
+## Pages
+
+The app has three tabs, in the header on wide screens and in a bar at the bottom of the screen on phones:
+
+- **Calendar** (`/calendar`, the home page after logging in): month, week and agenda views of tasks and class meetings, with a **This Week** box at the top listing overdue tasks, tasks due by Saturday and courses at risk
+- **Planner** (`/planner`): the task list with sorting, the add and edit task forms, grade entry and the study planner agent
+- **Classes & Grades** (`/classes`): an overview of every class's average, then each class with its details, meeting times, grading mode and weights, current average and graded work
+
+`/dashboard` redirects to the Calendar and `/grades` to Classes & Grades, so old links keep working.
+
 ## Features
 
 - Email and password sign-up, login and logout with Supabase Auth, including email confirmation links
 - A private task list per user, with a title, optional description, subject, due date, estimated minutes, planned day, priority (`low`, `medium`, `high`, `extreme`) and status (`todo`, `in_progress`, `done`)
 - Classes with an instructor, location, color, term dates and weekly meeting times, shown as a compact schedule such as "MWF 10:00–10:50 AM". Tasks can optionally belong to a class
-- Grading: give a task a type (homework, quiz, test, project, exam or discussion) and max points, then enter a score or a letter grade once it's due. Each class is graded by weighted percentages or by total points, and the Classes and Grades pages show each class's current average as a percentage and a letter
+- Grading: give a task a type (homework, quiz, test, project, exam or discussion) and max points, then enter a score or a letter grade once it's due. Each class is graded by weighted percentages or by total points, and the Classes & Grades tab shows each class's current average as a percentage and a letter. Classes below 70% are flagged as at risk, and below 60% as failing, on the Calendar
 - A calendar with month, week and agenda views. Tasks show on their due date and, as a study session, on their planned day; class meetings repeat weekly within each class's term. Filter by class or hide completed tasks, tap a task to edit or grade it, and tap a day to add a task due that day
 - A study planner agent, powered by Claude, that can list, create and schedule your tasks
 - Row Level Security in the database, so every query, including the agent's, can only reach the signed-in user's own tasks and classes
@@ -75,13 +85,13 @@ A built-in study planner agent can do the planning for you. Describe your course
 
 ## The study planner agent
 
-The agent lives at `POST /api/agent` ([`app/api/agent/route.ts`](app/api/agent/route.ts)). The dashboard sends it the student's message along with their local date, so "tomorrow" means the student's tomorrow. The agent then runs a tool-use loop with Claude, capped at 8 steps. It has three tools, defined in [`lib/agent/tools.ts`](lib/agent/tools.ts):
+The agent lives at `POST /api/agent` ([`app/api/agent/route.ts`](app/api/agent/route.ts)). The Planner sends it the student's message along with their local date, so "tomorrow" means the student's tomorrow. The agent then runs a tool-use loop with Claude, capped at 8 steps. It has three tools, defined in [`lib/agent/tools.ts`](lib/agent/tools.ts):
 
 - `list_tasks`: read the student's current tasks
 - `create_tasks`: add up to 20 tasks at once
 - `schedule_task`: set or clear the day a task is planned for
 
-The server validates every tool input before it reaches the database. The agent can't delete tasks. When it finishes, it returns a short summary, and the dashboard lists every task it created or scheduled.
+The server validates every tool input before it reaches the database. The agent can't delete tasks. When it finishes, it returns a short summary, and the Planner lists every task it created or scheduled.
 
 ## Project structure
 
@@ -89,10 +99,9 @@ The server validates every tool input before it reaches the database. The agent 
 app/
   api/agent/        Planner agent API route
   auth/             Auth server actions and the email confirmation callback
-  calendar/         Calendar page: month, week and agenda views, day and task sheets, filters
-  classes/          Class list, class form (with meeting times, grading mode and weights) and class actions
-  dashboard/        Task list, add-task form, grade form, agent panel and task actions
-  grades/           Grades overview of every class
+  calendar/         Calendar page: This Week box, month, week and agenda views, day and task sheets, filters
+  classes/          Classes & Grades page: averages overview, class cards and form (meeting times, grading mode, weights), class actions
+  planner/          Planner page: task list, add-task form, grade form, agent panel and task actions
   login/, signup/   Auth pages
 components/         Shared UI (the auth form, the app header with navigation, class averages)
 lib/
@@ -103,7 +112,7 @@ lib/
 supabase/
   schema.sql        Full database schema for a new project
   migrations/       Changes for databases created from an older schema
-proxy.ts            Refreshes the session and keeps signed-out users out of /dashboard, /calendar, /classes and /grades
+proxy.ts            Refreshes the session and keeps signed-out users out of /calendar, /planner and /classes
 ```
 
 ## Upgrading an existing database

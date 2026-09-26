@@ -79,7 +79,7 @@ export async function addTask(
   });
   if (error) return { error: "Couldn't save the task. Please try again." };
 
-  revalidatePath("/dashboard");
+  revalidatePath("/planner");
 
   revalidatePath("/calendar");
   // Changing counter lets the form know to reset itself.
@@ -94,7 +94,7 @@ export async function setTaskStatus(id: string, status: TaskStatus) {
   const supabase = await createClient();
   const { error } = await supabase.from("tasks").update({ status }).eq("id", id);
   if (error) throw new Error("Couldn't update the task.");
-  revalidatePath("/dashboard");
+  revalidatePath("/planner");
   revalidatePath("/calendar");
 }
 
@@ -102,7 +102,7 @@ export async function deleteTask(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) throw new Error("Couldn't delete the task.");
-  revalidatePath("/dashboard");
+  revalidatePath("/planner");
   revalidatePath("/calendar");
 }
 
@@ -124,17 +124,16 @@ export async function updateTaskDetails(id: string, formData: FormData) {
   // 23514 is a check violation: here, removing max points from a task with a score.
   if (error?.code === "23514") throw new Error("A score needs max points. Clear the grade first.");
   if (error) throw new Error("Couldn't update the task.");
-  revalidatePath("/dashboard");
+  revalidatePath("/planner");
   revalidatePath("/calendar");
 }
 
 const SCORE_LIMIT = 1_000_000;
 
 function revalidateGrades() {
-  revalidatePath("/dashboard");
+  revalidatePath("/planner");
   revalidatePath("/calendar");
   revalidatePath("/classes");
-  revalidatePath("/grades");
 }
 
 /**

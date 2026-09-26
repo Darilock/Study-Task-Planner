@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Sign up" };
 export default async function SignupPage() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
-  if (data?.claims) redirect("/dashboard");
+  if (data?.claims) redirect("/calendar");
 
   return <AuthForm mode="signup" action={signup} />;
 }

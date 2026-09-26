@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CALENDAR_VIEWS,
   eachDateKey,
@@ -14,34 +14,27 @@ import {
 } from "@/lib/calendar/dates";
 import type { MeetingOccurrence } from "@/lib/calendar/recurrence";
 import { useLocalToday } from "@/lib/use-local-today";
+import { useStoredValue } from "@/lib/use-stored-value";
 import type { Task } from "@/lib/types";
-import { AddTaskForm } from "../dashboard/add-task-form";
-import { TaskItem } from "../dashboard/task-item";
+import { AddTaskForm } from "../planner/add-task-form";
+import { TaskItem } from "../planner/task-item";
 import { AgendaView } from "./agenda-view";
 import { DayList } from "./day-list";
 import { FilterPanel } from "./filter-panel";
-import { DEFAULT_FILTER, dayItemCount, groupByDay, type CalendarClass, type CalendarFilter } from "./items";
+import {
+  DEFAULT_FILTER,
+  dayItemCount,
+  groupByDay,
+  type CalendarClass,
+  type CalendarFilter,
+  type ClassRisk,
+} from "./items";
 import { MonthView } from "./month-view";
 import { Sheet } from "./sheet";
+import { WeekSummary } from "./week-summary";
 import { WeekView } from "./week-view";
 
 const FILTER_STORAGE_KEY = "calendar-filter";
-const filterListeners = new Set<() => void>();
-// Used when localStorage is unavailable (private windows, blocked site data).
-let filterInMemory: string | null = null;
-
-function subscribeToFilter(listener: () => void) {
-  filterListeners.add(listener);
-  return () => filterListeners.delete(listener);
-}
-
-function readStoredFilter(): string | null {
-  try {
-    return localStorage.getItem(FILTER_STORAGE_KEY) ?? filterInMemory;
-  } catch {
-    return filterInMemory;
-  }
-}
 
 function parseFilter(raw: string | null): CalendarFilter {
   try {
@@ -56,27 +49,6 @@ function parseFilter(raw: string | null): CalendarFilter {
     // Fall through to the default.
   }
   return DEFAULT_FILTER;
-}
-
-/**
- * The filter, remembered in this browser only. The server render (and the
- * first client render) use the default, so hydration always matches.
- */
-function useStoredFilter() {
-  const raw = useSyncExternalStore(subscribeToFilter, readStoredFilter, () => null);
-  const filter = useMemo(() => parseFilter(raw), [raw]);
-
-  function update(next: CalendarFilter) {
-    filterInMemory = JSON.stringify(next);
-    try {
-      localStorage.setItem(FILTER_STORAGE_KEY, filterInMemory);
-    } catch {
-      // Still applied for this visit via filterInMemory.
-    }
-    filterListeners.forEach((listener) => listener());
-  }
-
-  return [filter, update] as const;
 }
 
 const VIEW_LABELS: Record<CalendarView, string> = { month: "Month", week: "Week", agenda: "Agenda" };
@@ -98,12 +70,15 @@ type Props = {
   tasks: Task[];
   meetings: MeetingOccurrence[];
   classes: CalendarClass[];
+  /** For the This Week box: incomplete tasks due by the end of this week, overdue included. */
+  weekTasks: Task[];
+  risks: ClassRisk[];
 };
 
-export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classes }: Props) {
+export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classes, weekTasks, risks }: Props) {
   const router = useRouter();
   const today = useLocalToday();
-  const [filter, setFilter] = useStoredFilter();
+  const [filter, setFilter] = useStoredValue(FILTER_STORAGE_KEY, parseFilter);
   const [filterOpen, setFilterOpen] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [addingTask, setAddingTask] = useState(false);
@@ -126,7 +101,10 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
 
   // Looked up on every render so the sheet shows fresh data after an edit,
   // and closes by itself if the task is deleted.
-  const openTask = openTaskId ? tasks.find((t) => t.id === openTaskId) : undefined;
+  // The This Week box can show overdue tasks from outside the visible range.
+  const openTask = openTaskId
+    ? (tasks.find((t) => t.id === openTaskId) ?? weekTasks.find((t) => t.id === openTaskId))
+    : undefined;
 
   const viewProps = {
     days,
@@ -144,6 +122,14 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
 
   return (
     <>
+      <WeekSummary
+        tasks={weekTasks}
+        risks={risks}
+        classesById={classesById}
+        today={today}
+        onOpenTask={viewProps.onOpenTask}
+      />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center justify-between gap-2 sm:justify-start">
           <h1 className="text-lg font-semibold sm:order-last sm:ml-2 sm:text-xl">{rangeTitle(view, anchor)}</h1>

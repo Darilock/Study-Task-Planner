@@ -80,6 +80,8 @@ export async function addTask(
   if (error) return { error: "Couldn't save the task. Please try again." };
 
   revalidatePath("/dashboard");
+
+  revalidatePath("/calendar");
   // Changing counter lets the form know to reset itself.
   return { ok: (prev.ok ?? 0) + 1 };
 }
@@ -93,6 +95,7 @@ export async function setTaskStatus(id: string, status: TaskStatus) {
   const { error } = await supabase.from("tasks").update({ status }).eq("id", id);
   if (error) throw new Error("Couldn't update the task.");
   revalidatePath("/dashboard");
+  revalidatePath("/calendar");
 }
 
 export async function deleteTask(id: string) {
@@ -100,6 +103,7 @@ export async function deleteTask(id: string) {
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) throw new Error("Couldn't delete the task.");
   revalidatePath("/dashboard");
+  revalidatePath("/calendar");
 }
 
 export async function updateTaskDetails(id: string, formData: FormData) {
@@ -121,12 +125,14 @@ export async function updateTaskDetails(id: string, formData: FormData) {
   if (error?.code === "23514") throw new Error("A score needs max points. Clear the grade first.");
   if (error) throw new Error("Couldn't update the task.");
   revalidatePath("/dashboard");
+  revalidatePath("/calendar");
 }
 
 const SCORE_LIMIT = 1_000_000;
 
 function revalidateGrades() {
   revalidatePath("/dashboard");
+  revalidatePath("/calendar");
   revalidatePath("/classes");
   revalidatePath("/grades");
 }

@@ -10,6 +10,7 @@ A built-in study planner agent can do the planning for you. Describe your course
 - A private task list per user, with a title, optional description, subject, due date, estimated minutes, planned day, priority (`low`, `medium`, `high`, `extreme`) and status (`todo`, `in_progress`, `done`)
 - Classes with an instructor, location, color, term dates and weekly meeting times, shown as a compact schedule such as "MWF 10:00–10:50 AM". Tasks can optionally belong to a class
 - Grading: give a task a type (homework, quiz, test, project, exam or discussion) and max points, then enter a score or a letter grade once it's due. Each class is graded by weighted percentages or by total points, and the Classes and Grades pages show each class's current average as a percentage and a letter
+- A calendar with month, week and agenda views. Tasks show on their due date and, as a study session, on their planned day; class meetings repeat weekly within each class's term. Filter by class or hide completed tasks, tap a task to edit or grade it, and tap a day to add a task due that day
 - A study planner agent, powered by Claude, that can list, create and schedule your tasks
 - Row Level Security in the database, so every query, including the agent's, can only reach the signed-in user's own tasks and classes
 
@@ -19,6 +20,7 @@ A built-in study planner agent can do the planning for you. Describe your course
 - [Supabase](https://supabase.com) for Postgres and auth, via `@supabase/ssr`
 - [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript) for the planner agent
 - Tailwind CSS 4
+- [date-fns](https://date-fns.org) for calendar date math
 
 ## Requirements
 
@@ -87,6 +89,7 @@ The server validates every tool input before it reaches the database. The agent 
 app/
   api/agent/        Planner agent API route
   auth/             Auth server actions and the email confirmation callback
+  calendar/         Calendar page: month, week and agenda views, day and task sheets, filters
   classes/          Class list, class form (with meeting times, grading mode and weights) and class actions
   dashboard/        Task list, add-task form, grade form, agent panel and task actions
   grades/           Grades overview of every class
@@ -95,11 +98,12 @@ components/         Shared UI (the auth form, the app header with navigation, cl
 lib/
   grades.ts         Letter grades and class average calculation (tested in grades.test.ts)
   agent/            Agent tool definitions, validation and shared types
+  calendar/         Local date helpers and class meeting recurrence (tested in recurrence.test.ts)
   supabase/         Supabase clients for the browser, the server and the proxy
 supabase/
   schema.sql        Full database schema for a new project
   migrations/       Changes for databases created from an older schema
-proxy.ts            Refreshes the session and keeps signed-out users out of /dashboard, /classes and /grades
+proxy.ts            Refreshes the session and keeps signed-out users out of /dashboard, /calendar, /classes and /grades
 ```
 
 ## Upgrading an existing database

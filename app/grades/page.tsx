@@ -41,7 +41,7 @@ export default async function GradesPage() {
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
       <AppHeader current="grades" email={auth.claims.email} />
 
-      <main className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <main className="mx-auto flex w-full max-w-2xl flex-col gap-4 app-main px-4 py-6">
         <h1 className="sr-only">Grades</h1>
 
         {error || taskError ? (

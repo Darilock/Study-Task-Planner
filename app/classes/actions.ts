@@ -88,6 +88,7 @@ function revalidate() {
   revalidatePath("/grades");
   // Tasks show their class's name and color.
   revalidatePath("/dashboard");
+  revalidatePath("/calendar");
 }
 
 // Server actions are public endpoints; RLS limits these to the caller's rows.

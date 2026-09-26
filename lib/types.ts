@@ -14,6 +14,10 @@ export function isPriority(value: unknown): value is TaskPriority {
 export const DESCRIPTION_MAX_LENGTH = 2000;
 export const MAX_POINTS_LIMIT = 100000;
 
+/** Every column in Task, for select() calls. */
+export const TASK_COLUMNS =
+  "id, title, description, subject, due_date, estimated_minutes, scheduled_for, priority, class_id, task_type, max_points, score, letter_grade, graded_at, status, created_at";
+
 export type Task = {
   id: string;
   title: string;

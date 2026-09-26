@@ -1,20 +1,31 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useEffectEvent, useRef } from "react";
 import { DEFAULT_PRIORITY, DESCRIPTION_MAX_LENGTH, type ClassSummary } from "@/lib/types";
 import { addTask } from "./actions";
 import { GradingFields } from "./grading-fields";
 import { PrioritySelect } from "./priority-select";
 
-export function AddTaskForm({ classes }: { classes: ClassSummary[] }) {
+type Props = {
+  classes: ClassSummary[];
+  /** Pre-fills the due date, e.g. when adding from a calendar day. */
+  defaultDueDate?: string;
+  onAdded?: () => void;
+};
+
+export function AddTaskForm({ classes, defaultDueDate, onAdded }: Props) {
   const [state, formAction, pending] = useActionState(addTask, {});
   const formRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // Called from the effect below without re-running it when the callback changes.
+  const notifyAdded = useEffectEvent(() => onAdded?.());
 
   useEffect(() => {
     if (state.ok) {
       formRef.current?.reset();
       titleRef.current?.focus();
+      notifyAdded();
     }
   }, [state.ok]);
 
@@ -59,7 +70,7 @@ export function AddTaskForm({ classes }: { classes: ClassSummary[] }) {
         </label>
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           Due date
-          <input name="due_date" type="date" className="input" />
+          <input name="due_date" type="date" defaultValue={defaultDueDate} className="input" />
         </label>
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           Minutes

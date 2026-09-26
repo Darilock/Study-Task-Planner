@@ -5,6 +5,7 @@ import {
   LETTER_GRADES,
   LETTER_PERCENT,
   letterForPercent,
+  riskLevel,
   type GradedTask,
   type LetterGrade,
   type TaskType,
@@ -155,5 +156,29 @@ describe("either mode", () => {
     const result = computeClassAverage([score("exam", 8996, 10000)], "points");
     assert.equal(result.percent, 90);
     assert.equal(result.letter, "A-");
+  });
+});
+
+describe("risk levels", () => {
+  test("thresholds", () => {
+    assert.equal(riskLevel({ percent: 59.9 }), "failing");
+    assert.equal(riskLevel({ percent: 60 }), "at-risk");
+    assert.equal(riskLevel({ percent: 69.9 }), "at-risk");
+    assert.equal(riskLevel({ percent: 70 }), null);
+    assert.equal(riskLevel({ percent: 104 }), null);
+  });
+
+  test("a class with no grades isn't flagged", () => {
+    assert.equal(riskLevel(computeClassAverage([], "points")), null);
+  });
+
+  test("uses the computed class average", () => {
+    const average = computeClassAverage([score("exam", 55, 100), letter("quiz", "C", 10)], "percent", {
+      exam: 50,
+      quiz: 50,
+    });
+    // (55% × 50 + 75% × 50) / 100
+    assert.equal(average.percent, 65);
+    assert.equal(riskLevel(average), "at-risk");
   });
 });

@@ -163,3 +163,15 @@ export function computeClassAverage(
   // The letter comes from the rounded value so it always matches what's shown.
   return { percent: rounded, letter: letterForPercent(rounded), gradedCount, unweightedTypes };
 }
+
+/** Class averages below these percentages are flagged: at risk, or failing. */
+export const RISK_THRESHOLDS = { atRisk: 70, failing: 60 } as const;
+export type RiskLevel = "failing" | "at-risk";
+
+/** How worried to be about a class's average. Classes with no average yet are never flagged. */
+export function riskLevel(average: Pick<ClassAverage, "percent">): RiskLevel | null {
+  if (average.percent === null) return null;
+  if (average.percent < RISK_THRESHOLDS.failing) return "failing";
+  if (average.percent < RISK_THRESHOLDS.atRisk) return "at-risk";
+  return null;
+}

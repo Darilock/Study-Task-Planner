@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { formatDate } from "@/lib/format";
+import { differenceInCalendarDays } from "date-fns";
+import { formatDateKey, parseLocalDate, toDateKey } from "@/lib/calendar/dates";
 import {
   AGENT_INPUT_MAX_LENGTH,
   type AgentAction,
@@ -11,20 +12,15 @@ import {
 
 type Result = { summary: string; actions: AgentAction[] };
 
-function localToday() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+const localToday = () => toDateKey(new Date());
 
+/** "today", "tomorrow", "Thu" within the week, otherwise "Thu, Oct 8". Dates are local calendar dates. */
 function describeDay(date: string, today: string) {
-  const days = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  const days = differenceInCalendarDays(parseLocalDate(date), parseLocalDate(today));
   if (days === 0) return "today";
   if (days === 1) return "tomorrow";
-  if (days > 1 && days < 7) {
-    return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
-  }
-  return formatDate(date);
+  if (days > 1 && days < 7) return formatDateKey(date, "EEE");
+  return formatDateKey(date, "EEE, MMM d");
 }
 
 function describeAction(action: AgentAction, today: string) {
@@ -58,7 +54,10 @@ export function AgentPanel() {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, today: now }),
+        body: JSON.stringify({
+          message: trimmed,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
       });
       const data = (await res.json().catch(() => null)) as AgentResponse | null;
 

@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { runTool, tools } from "@/lib/agent/tools";
-import { isValidDate } from "@/lib/dates";
+import { localDateInZone, resolveTimeZone } from "@/lib/agent/local-date";
 import { AGENT_INPUT_MAX_LENGTH, type AgentAction, type AgentResponse } from "@/lib/agent/types";
 
 const MAX_ITERATIONS = 8;
@@ -11,26 +11,10 @@ function json(body: AgentResponse, status = 200) {
   return Response.json(body, { status });
 }
 
-/**
- * The client sends its local date so "tomorrow" means the student's tomorrow,
- * not the server's. Only trust it if it's within a day of the server's UTC date.
- */
-function resolveToday(clientToday: unknown): string {
-  const serverToday = new Date().toISOString().slice(0, 10);
-  if (typeof clientToday !== "string" || !isValidDate(clientToday)) return serverToday;
-  const diffDays =
-    Math.abs(Date.parse(`${clientToday}T00:00:00Z`) - Date.parse(`${serverToday}T00:00:00Z`)) / 86_400_000;
-  return diffDays <= 1 ? clientToday : serverToday;
-}
-
-function systemPrompt(today: string) {
-  const weekday = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
-  });
+function systemPrompt(today: string, weekday: string, timeZone: string) {
   return `You are a study-planning assistant inside a student's task planner. You help them break down coursework into tasks and decide which day to work on each one.
 
-Today is ${weekday}, ${today}. Resolve relative dates ("Friday", "next week", "in 3 days") against today and always pass dates to tools as YYYY-MM-DD.
+Today is ${weekday}, ${today} (the student's time zone is ${timeZone}). Resolve relative dates ("Friday", "next week", "in 3 days") against today and always pass dates to tools as YYYY-MM-DD.
 
 How to work:
 - Call list_tasks first to see what already exists, so you don't create duplicates and can plan around existing work.
@@ -48,7 +32,7 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getClaims();
   if (!auth?.claims) return json({ error: "You need to be logged in." }, 401);
 
-  let body: { message?: unknown; today?: unknown };
+  let body: { message?: unknown; timeZone?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -67,7 +51,11 @@ export async function POST(request: Request) {
   }
 
   const client = new Anthropic();
-  const system = systemPrompt(resolveToday(body.today));
+  // The client sends its IANA time zone so "today" and "tomorrow" are the
+  // student's, not the server's.
+  const timeZone = resolveTimeZone(body.timeZone);
+  const { date: today, weekday } = localDateInZone(new Date(), timeZone);
+  const system = systemPrompt(today, weekday, timeZone);
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: message }];
   const actions = new Map<string, AgentAction>();
   let summary = "";

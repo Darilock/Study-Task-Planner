@@ -25,7 +25,19 @@ export type AgentAction =
       title: string;
       className: string | null;
       changes: TaskChange[];
+    }
+  | {
+      kind: "created_class";
+      classId: string;
+      name: string;
+      /** e.g. "MWF 10:00–10:50 AM", or null with no meeting times. */
+      schedule: string | null;
     };
+
+/** A stable key for an action (tasks and classes have separate ids). */
+export function actionKey(action: AgentAction) {
+  return action.kind === "created_class" ? action.classId : action.taskId;
+}
 
 export type AgentResponse =
   | { summary: string; actions: AgentAction[] }

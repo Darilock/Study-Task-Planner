@@ -51,4 +51,14 @@ describe("describeAction", () => {
       ["Due date: Lab report → Fri, Oct 9"],
     );
   });
+
+  test("created classes show their schedule", () => {
+    assert.deepEqual(
+      describeAction({ kind: "created_class", classId: "e", name: "Biology", schedule: "MWF 10:00–10:50 AM" }, TODAY),
+      ["Created class: Biology — MWF 10:00–10:50 AM"],
+    );
+    assert.deepEqual(describeAction({ kind: "created_class", classId: "f", name: "Seminar", schedule: null }, TODAY), [
+      "Created class: Seminar",
+    ]);
+  });
 });

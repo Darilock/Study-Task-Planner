@@ -32,6 +32,9 @@ function describeChange(change: TaskChange, title: string, today: string) {
 
 /** One or more lines per action: a created task is one line, an update is one line per changed field. */
 export function describeAction(action: AgentAction, today: string): string[] {
+  if (action.kind === "created_class") {
+    return [`Created class: ${action.name}${action.schedule ? ` — ${action.schedule}` : ""}`];
+  }
   const title = action.className ? `${action.title} (${action.className})` : action.title;
   if (action.kind === "created") {
     const parts = [`Created: ${title}`];

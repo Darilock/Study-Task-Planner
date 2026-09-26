@@ -2,7 +2,7 @@ import "server-only";
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { averagesByClass, GRADED_TASK_COLUMNS, type GradedTaskRow } from "@/lib/class-averages";
-import { RISK_THRESHOLDS, riskLevel, TASK_TYPES } from "@/lib/grades";
+import { GRADING_MODES, RISK_THRESHOLDS, riskLevel, TASK_TYPES } from "@/lib/grades";
 import { DAY_NAMES, formatSchedule } from "@/lib/schedule";
 import type { createClient } from "@/lib/supabase/server";
 import {
@@ -17,7 +17,12 @@ import {
   asObject,
   checkChangeCap,
   checkTaskUpdate,
+  CLASS_COLOR_NAMES,
+  findDuplicateClasses,
+  MAX_CLASSES_PER_REQUEST,
   MAX_TASK_CHANGES_PER_REQUEST,
+  parseCreateClasses,
+  weightWarning,
   parseCreateTasks,
   parseUpdateTask,
   parseListTasks,
@@ -129,6 +134,64 @@ export const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "create_class",
+    description:
+      `Create up to ${MAX_CLASSES_PER_REQUEST} new classes. Only for classes the student asked to add or agreed to ` +
+      "create; never guess meeting times, ask for them. Classes that already exist (same name, ignoring case) are " +
+      "not created again; the result gives their ids to use instead. Existing classes can't be edited or deleted. " +
+      "If the result includes a warning, pass it on to the student.",
+    input_schema: {
+      type: "object",
+      properties: {
+        classes: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_CLASSES_PER_REQUEST,
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Class name, e.g. \"BIO 101\". Max 100 characters." },
+              instructor: { type: ["string", "null"] },
+              location: { type: ["string", "null"] },
+              color: { type: ["string", "null"], enum: [...CLASS_COLOR_NAMES, null] },
+              start_date: { type: ["string", "null"], description: "First day of the term, YYYY-MM-DD." },
+              end_date: { type: ["string", "null"], description: "Last day of the term, YYYY-MM-DD, after start_date." },
+              grading_mode: {
+                type: "string",
+                enum: [...GRADING_MODES],
+                description: '"percent" (default) weights each task type; "points" totals points earned.',
+              },
+              meetings: {
+                type: "array",
+                description: "Weekly meeting times. Leave empty if the student didn't give them.",
+                items: {
+                  type: "object",
+                  properties: {
+                    day: { type: "integer", minimum: 0, maximum: 6, description: "0 = Sunday … 6 = Saturday." },
+                    start_time: { type: "string", description: "24-hour HH:MM." },
+                    end_time: { type: "string", description: "24-hour HH:MM, after start_time." },
+                  },
+                  required: ["day", "start_time", "end_time"],
+                  additionalProperties: false,
+                },
+              },
+              weights: {
+                type: ["object", "null"],
+                description: "Percent mode only: how much each task type counts, e.g. {\"homework\": 20, \"exam\": 50}.",
+                properties: Object.fromEntries(TASK_TYPES.map((t) => [t, { type: "number" }])),
+                additionalProperties: false,
+              },
+            },
+            required: ["name"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["classes"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "update_task",
     description:
       "Change an existing task that isn't completed: its priority, description, due_date, scheduled_for (the planned " +
@@ -178,6 +241,8 @@ export async function runTool(
         return await listTasks(supabase, input);
       case "create_tasks":
         return await createTasks(supabase, input, actions, context.today);
+      case "create_class":
+        return await createClasses(supabase, input, actions);
       case "update_task":
         return await updateTask(supabase, input, actions, context.today);
       default:
@@ -391,6 +456,72 @@ async function updateTask(
     });
   }
   return { content: JSON.stringify({ updated: data }), isError: false };
+}
+
+async function createClasses(
+  supabase: Supabase,
+  input: unknown,
+  actions: Map<string, AgentAction>,
+): Promise<ToolResult> {
+  const requested = parseCreateClasses(input);
+
+  const { data: existing, error: loadError } = await supabase.from("classes").select("id, name");
+  if (loadError) return { content: "Couldn't check the existing classes.", isError: true };
+  const { toCreate, alreadyExist } = findDuplicateClasses(requested, existing);
+
+  const createdBefore = [...actions.values()].filter((a) => a.kind === "created_class").length;
+  if (createdBefore + toCreate.length > MAX_CLASSES_PER_REQUEST) {
+    throw new ToolInputError(
+      `One request can create at most ${MAX_CLASSES_PER_REQUEST} classes, and ${MAX_CLASSES_PER_REQUEST - createdBefore} are left.`,
+    );
+  }
+  checkChangeCap(new Set(actions.keys()), { newItems: toCreate.length });
+
+  const created = [];
+  for (const { meetings, weights, ...values } of toCreate) {
+    // user_id is intentionally omitted: the column defaults to auth.uid().
+    const { data: row, error } = await supabase.from("classes").insert(values).select("id").single();
+    if (error) return failedClass(values.name, created);
+
+    const meetingsResult = meetings.length
+      ? await supabase.from("class_meetings").insert(meetings.map((m) => ({ ...m, class_id: row.id })))
+      : { error: null };
+    const weightsResult =
+      !meetingsResult.error && weights.length
+        ? await supabase.from("class_weights").insert(weights.map((w) => ({ ...w, class_id: row.id })))
+        : { error: null };
+    if (meetingsResult.error || weightsResult.error) {
+      // Don't leave a half-created class behind; its meetings and weights cascade.
+      await supabase.from("classes").delete().eq("id", row.id);
+      return failedClass(values.name, created);
+    }
+
+    const schedule = formatSchedule(meetings).join("; ") || null;
+    actions.set(row.id, { kind: "created_class", classId: row.id, name: values.name, schedule });
+    created.push({
+      id: row.id,
+      name: values.name,
+      schedule,
+      grading_mode: values.grading_mode,
+      ...(weightWarning(weights) && { warning: weightWarning(weights) }),
+    });
+  }
+
+  return {
+    content: JSON.stringify({
+      created,
+      already_exist: alreadyExist.map((c) => ({
+        ...c,
+        note: "A class with this name already exists, so it wasn't created. Tell the student and use this id.",
+      })),
+    }),
+    isError: false,
+  };
+}
+
+function failedClass(name: string, created: { name: string }[]): ToolResult {
+  const done = created.length ? ` These were created: ${created.map((c) => c.name).join(", ")}.` : "";
+  return { content: `Couldn't create the class "${name}", so nothing was saved for it.${done}`, isError: true };
 }
 
 async function classNameOf(supabase: Supabase, classId: string | null) {

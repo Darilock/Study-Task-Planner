@@ -8,6 +8,7 @@ import { ASSISTANT_MESSAGE_MAX_LENGTH } from "@/lib/agent/history";
 import {
   AGENT_HISTORY_LIMIT,
   AGENT_INPUT_MAX_LENGTH,
+  actionKey,
   type AgentAction,
   type AgentResponse,
 } from "@/lib/agent/types";
@@ -142,7 +143,7 @@ export function AgentPanel() {
                   <ul aria-label="Changes made" className="flex flex-col gap-1 text-zinc-600 dark:text-zinc-400">
                     {turn.actions.flatMap((action) =>
                       describeAction(action, turn.today).map((line, j) => (
-                        <li key={`${action.taskId}-${j}`} className="flex gap-2 break-words">
+                        <li key={`${actionKey(action)}-${j}`} className="flex gap-2 break-words">
                           <span aria-hidden className="text-emerald-600 dark:text-emerald-400">
                             ✓
                           </span>

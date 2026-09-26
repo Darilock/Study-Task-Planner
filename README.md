@@ -21,7 +21,7 @@ The app has three tabs, in the header on wide screens and in a bar at the bottom
 - Classes with an instructor, location, color, term dates and weekly meeting times, shown as a compact schedule such as "MWF 10:00–10:50 AM". Tasks can optionally belong to a class
 - Grading: give a task a type (homework, quiz, test, project, exam or discussion) and max points, then enter a score or a letter grade once it's due. Each class is graded by weighted percentages or by total points, and the Classes & Grades tab shows each class's current average as a percentage and a letter. Classes below 70% are flagged as at risk, and below 60% as failing, on the Calendar
 - A calendar with month, week and agenda views. Tasks show on their due date and, as a study session, on their planned day; class meetings repeat weekly within each class's term. Filter by class or hide completed tasks, tap a task to edit or grade it, and tap a day to add a task due that day
-- A study planner agent, powered by Claude, that can list, create and schedule your tasks
+- A study planner agent, powered by Claude, that knows your classes, grades and tasks, and creates and reschedules tasks for you in a conversation
 - Row Level Security in the database, so every query, including the agent's, can only reach the signed-in user's own tasks and classes
 
 ## Tech stack
@@ -85,13 +85,42 @@ The app has three tabs, in the header on wide screens and in a bar at the bottom
 
 ## The study planner agent
 
-The agent lives at `POST /api/agent` ([`app/api/agent/route.ts`](app/api/agent/route.ts)). The Planner sends it the student's message along with their local date, so "tomorrow" means the student's tomorrow. The agent then runs a tool-use loop with Claude, capped at 8 steps. It has three tools, defined in [`lib/agent/tools.ts`](lib/agent/tools.ts):
+The agent lives at `POST /api/agent` ([`app/api/agent/route.ts`](app/api/agent/route.ts)) and is used from the panel on the Planner tab. It's a conversation: the panel keeps the current conversation and sends the last 10 messages with each request (each student message is capped at 1,000 characters). **New conversation** starts over.
 
-- `list_tasks`: read the student's current tasks
-- `create_tasks`: add up to 20 tasks at once
-- `schedule_task`: set or clear the day a task is planned for
+**Dates.** The panel also sends the browser's IANA time zone (for example `America/New_York`). The server validates it, falling back to UTC, and works out the student's local date and weekday for the system prompt ([`lib/agent/local-date.ts`](lib/agent/local-date.ts)). So at 10 PM on a Friday in New York, "tomorrow" means Saturday.
 
-The server validates every tool input before it reaches the database. The agent can't delete tasks. When it finishes, it returns a short summary, and the Planner lists every task it created or scheduled.
+**Tools.** Each request runs a tool-use loop with Claude, capped at 12 steps. The tools are defined in [`lib/agent/tools.ts`](lib/agent/tools.ts):
+
+| Tool | What it does |
+| --- | --- |
+| `list_classes` | Each class with its meeting times and minutes of class per weekday, grading mode and weights, current average and letter, and status (`failing`, `at_risk`, `on_track` or `no_average`, using the same thresholds as the Calendar) |
+| `list_tasks` | Tasks with their type, priority, class, due and planned dates, estimated minutes, status and whether they're graded. Optional filters: date range, class, status (defaults to everything not done) |
+| `create_tasks` | New tasks with a title, class, type, priority, description, max points, due date, planned day and estimated minutes. Graded types need a class |
+| `update_task` | Change a task's priority, description, due date, planned day or estimated minutes. It can't change grades, and never touches completed tasks |
+| `create_class` | Create up to 5 classes with a name, instructor, location, palette color, term dates, grading mode, weekly meeting times and (in percent mode) weights |
+
+There's no delete tool, and the agent can't edit existing classes or their grading settings. One request can create or update at most 15 tasks and classes combined. A planned day can never be in the past or after the task's due date.
+
+**Classes.** `create_class` checks each class before saving it:
+
+- Meeting days are 0–6 (Sunday–Saturday), and each meeting ends after it starts.
+- The term ends after it starts.
+- Weights are above 0 and at most 100.
+- The color comes from the app's class palette.
+
+If the weights don't total 100%, the class is still saved and the agent mentions it. A class with the same name as an existing one (ignoring case) isn't created; the agent is told to use the existing class instead. The class, its meetings and its weights are saved one after another, and if the meetings or weights fail, the new class is deleted so nothing is left half-made. When the student mentions a class that doesn't exist, the agent offers to create it and asks for its meeting times rather than guessing.
+
+**Safety.** Every query runs through the signed-in student's Supabase session, so Row Level Security limits the agent to their own data. Every tool input is validated before it reaches the database ([`lib/agent/validation.ts`](lib/agent/validation.ts), with tests), and so is the conversation the browser sends ([`lib/agent/history.ts`](lib/agent/history.ts)).
+
+**Planning rules.** The system prompt tells the agent to:
+
+- Match the student's wording to their classes, and ask a short question when that's ambiguous.
+- Offer to create a class that doesn't exist yet, asking for its meeting times, and stay on topic.
+- Put lighter study on days with more class time.
+- Put Extreme and High priority work and at-risk classes first.
+- Create several "Study: …" sessions, spread before the due date, for exams and projects.
+
+When it finishes, the panel shows its reply and each change, like "Created: Quiz 3 (Bio), due Thu", "Moved: History essay → study Wed" or "Created class: Biology — MWF 10:00–10:50 AM". The Planner, the Calendar (with its This Week box) and Classes & Grades show the changes.
 
 ## Project structure
 

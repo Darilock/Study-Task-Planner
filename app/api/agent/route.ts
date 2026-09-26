@@ -1,46 +1,47 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { runTool, tools } from "@/lib/agent/tools";
-import { isValidDate } from "@/lib/dates";
-import { AGENT_INPUT_MAX_LENGTH, type AgentAction, type AgentResponse } from "@/lib/agent/types";
+import { MAX_TASK_CHANGES_PER_REQUEST } from "@/lib/agent/validation";
+import { localDateInZone, resolveTimeZone } from "@/lib/agent/local-date";
+import { parseHistory } from "@/lib/agent/history";
+import type { AgentAction, AgentResponse } from "@/lib/agent/types";
 
-const MAX_ITERATIONS = 8;
+const MAX_ITERATIONS = 12;
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
+
+/** Tasks show on the Calendar (and its This Week box), the Planner and Classes & Grades. */
+function revalidateChangedPages(actions: Map<string, AgentAction>) {
+  if (actions.size === 0) return;
+  revalidatePath("/calendar");
+  revalidatePath("/planner");
+  revalidatePath("/classes");
+}
 
 function json(body: AgentResponse, status = 200) {
   return Response.json(body, { status });
 }
 
-/**
- * The client sends its local date so "tomorrow" means the student's tomorrow,
- * not the server's. Only trust it if it's within a day of the server's UTC date.
- */
-function resolveToday(clientToday: unknown): string {
-  const serverToday = new Date().toISOString().slice(0, 10);
-  if (typeof clientToday !== "string" || !isValidDate(clientToday)) return serverToday;
-  const diffDays =
-    Math.abs(Date.parse(`${clientToday}T00:00:00Z`) - Date.parse(`${serverToday}T00:00:00Z`)) / 86_400_000;
-  return diffDays <= 1 ? clientToday : serverToday;
-}
+function systemPrompt(today: string, weekday: string, timeZone: string) {
+  return `You are the study planner inside a student's planning app. You help them turn coursework into tasks and decide which day to work on each one. You can see their classes (meeting times, grading and current averages) and their tasks.
 
-function systemPrompt(today: string) {
-  const weekday = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-US", {
-    weekday: "long",
-    timeZone: "UTC",
-  });
-  return `You are a study-planning assistant inside a student's task planner. You help them break down coursework into tasks and decide which day to work on each one.
-
-Today is ${weekday}, ${today}. Resolve relative dates ("Friday", "next week", "in 3 days") against today and always pass dates to tools as YYYY-MM-DD.
+Today is ${weekday}, ${today} in the student's time zone (${timeZone}). Resolve relative dates ("Friday", "next week", "in 3 days") against today, and always pass dates to tools as YYYY-MM-DD.
 
 How to work:
-- Call list_tasks first to see what already exists, so you don't create duplicates and can plan around existing work.
-- Use create_tasks to add new tasks and schedule_task to plan existing ones. scheduled_for is the day the student will work on a task; it should be on or before the task's due_date and not in the past.
-- Set each new task's priority (low, medium, high, extreme) from how urgent and important it is; use extreme sparingly. Add a short description when the student gives useful detail such as chapters, pages or instructions.
-- Spread work out so no single day is overloaded, and leave a buffer before deadlines when you can.
-- You cannot delete tasks. If asked to, say so and suggest the student delete them from the list.
-- If the request isn't about planning study tasks, briefly say what you can help with instead.
+- Start with list_classes and list_tasks so you know their classes, what already exists, and what's planned. Don't create duplicates.
+- Match what the student says to their existing classes ("bio", "chem lab", "Dr. Rivera's class"). If it could mean more than one class, ask one short clarifying question instead of guessing.
+- If they mention a class that doesn't exist, offer to create it with create_class, and ask for its meeting times (and anything else you'd need) rather than guessing them. Only create a class once they've asked for it or agreed. If create_class reports that a class already exists, tell them and use that class.
+- You can create classes but never edit or delete them, and never change grading mode or weights on an existing class; point them to the Classes & Grades tab for that. If a new class's weights don't total 100%, say so in your reply.
+- Graded work (homework, quiz, test, project, exam, discussion) gets its task_type and class. Study sessions are ungraded tasks: no task_type, titled "Study: …", with the class set.
+- For exams and projects, also create several "Study: …" sessions with scheduled_for dates spread across the days before the due date. Size the number of sessions and their estimated minutes to the work.
+- Never schedule anything in the past or after its due date.
+- Balance the load: put lighter study on days with more class time (list_classes gives minutes of class per weekday), avoid piling several sessions onto one day, and leave a buffer before deadlines when you can.
+- Put Extreme and High priority work first, and give extra time to classes marked at_risk or failing.
+- Use update_task to move or re-prioritize existing work. It can't change grades or completed tasks, and you can't delete tasks: if asked, say so and suggest deleting from the Planner.
+- One request can create or update at most ${MAX_TASK_CHANGES_PER_REQUEST} tasks in total. If more is needed, do the most important ones and say what's left.
+- Stay on topic. If the request isn't about planning their studies, say briefly what you can help with.
 
-When you're done, reply with a short, friendly summary (2-4 sentences, plain text, no markdown) of what you did and any advice. Don't repeat every task; the app lists your actions separately.`;
+When you're done, reply with a short, friendly summary (2-4 sentences, plain text, no markdown) of what you did and any advice. Don't list every task; the app shows your changes separately. If you need an answer from the student first, just ask the question.`;
 }
 
 export async function POST(request: Request) {
@@ -48,18 +49,16 @@ export async function POST(request: Request) {
   const { data: auth } = await supabase.auth.getClaims();
   if (!auth?.claims) return json({ error: "You need to be logged in." }, 401);
 
-  let body: { message?: unknown; today?: unknown };
+  let body: { messages?: unknown; timeZone?: unknown };
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid request." }, 400);
   }
 
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) return json({ error: "Tell the planner what you need help with." }, 400);
-  if (message.length > AGENT_INPUT_MAX_LENGTH) {
-    return json({ error: `Keep your request under ${AGENT_INPUT_MAX_LENGTH} characters.` }, 400);
-  }
+  // The panel sends the recent conversation, ending with the new message.
+  const history = parseHistory(body.messages);
+  if ("error" in history) return json({ error: history.error }, 400);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("ANTHROPIC_API_KEY is not set");
@@ -67,8 +66,12 @@ export async function POST(request: Request) {
   }
 
   const client = new Anthropic();
-  const system = systemPrompt(resolveToday(body.today));
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: message }];
+  // The client sends its IANA time zone so "today" and "tomorrow" are the
+  // student's, not the server's.
+  const timeZone = resolveTimeZone(body.timeZone);
+  const { date: today, weekday } = localDateInZone(new Date(), timeZone);
+  const system = systemPrompt(today, weekday, timeZone);
+  const messages: Anthropic.MessageParam[] = history.messages.map((m) => ({ role: m.role, content: m.content }));
   const actions = new Map<string, AgentAction>();
   let summary = "";
 
@@ -100,7 +103,7 @@ export async function POST(request: Request) {
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type !== "tool_use") continue;
-        const result = await runTool(supabase, block.name, block.input, actions);
+        const result = await runTool(supabase, block.name, block.input, actions, { today });
         results.push({
           type: "tool_result",
           tool_use_id: block.id,
@@ -116,6 +119,7 @@ export async function POST(request: Request) {
     }
   } catch (e) {
     console.error("Agent run failed", e);
+    revalidateChangedPages(actions);
     const partial = actions.size > 0 ? " Some changes may have been saved." : "";
     if (e instanceof Anthropic.RateLimitError) {
       return json({ error: `The planner is busy right now. Try again in a minute.${partial}` }, 429);
@@ -126,6 +130,7 @@ export async function POST(request: Request) {
     return json({ error: `Something went wrong while planning.${partial}` }, 500);
   }
 
+  revalidateChangedPages(actions);
   return json({
     summary: summary || "Done.",
     actions: [...actions.values()],

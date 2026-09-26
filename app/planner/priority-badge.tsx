@@ -1,11 +1,6 @@
-import type { TaskPriority } from "@/lib/types";
+import { PRIORITY_NAMES, type TaskPriority } from "@/lib/types";
 
-export const PRIORITY_LABELS: Record<TaskPriority, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  extreme: "Extreme",
-};
+export const PRIORITY_LABELS = PRIORITY_NAMES;
 
 // Extreme is solid red with bold text so it stands out from the pastel badges.
 const STYLES: Record<TaskPriority, string> = {

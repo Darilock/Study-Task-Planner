@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
     return [
       // The Calendar replaced the Dashboard as the home page; keep old links and bookmarks working.
       { source: "/dashboard", destination: "/calendar", permanent: false },
+      // Grades merged into the Classes & Grades tab.
+      { source: "/grades", destination: "/classes", permanent: false },
     ];
   },
 };

@@ -1,8 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Old paths like /dashboard are redirected in next.config.ts before this runs.
-const PROTECTED_PATHS = ["/planner", "/calendar", "/classes", "/grades"];
+// Old paths (/dashboard, /grades) are redirected in next.config.ts before this runs.
+const PROTECTED_PATHS = ["/calendar", "/planner", "/classes"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

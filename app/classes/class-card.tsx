@@ -3,13 +3,38 @@
 import { useState, useTransition } from "react";
 import { ClassAverageDisplay } from "@/components/class-average";
 import { formatTerm } from "@/lib/format";
-import type { ClassAverage } from "@/lib/grades";
+import { TASK_TYPE_LABELS, TASK_TYPES, type ClassAverage } from "@/lib/grades";
 import { formatSchedule } from "@/lib/schedule";
 import type { SchoolClass } from "@/lib/types";
 import { deleteClass, updateClass } from "./actions";
 import { ClassForm } from "./class-form";
+import { GradedWork, type GradedWorkItem } from "./graded-work";
 
-function ClassDetails({ schoolClass, average }: { schoolClass: SchoolClass; average: ClassAverage }) {
+/** "Graded by points", or "Weighted: Homework 20% · Quiz 30%". */
+function GradingSummary({ schoolClass }: { schoolClass: SchoolClass }) {
+  if (schoolClass.grading_mode === "points") {
+    return <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Graded by points</p>;
+  }
+  const weights = [...schoolClass.class_weights].sort(
+    (a, b) => TASK_TYPES.indexOf(a.task_type) - TASK_TYPES.indexOf(b.task_type),
+  );
+  if (weights.length === 0) {
+    return <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Weighted by type · no weights set yet</p>;
+  }
+  const total = Math.round(weights.reduce((sum, w) => sum + w.weight, 0) * 100) / 100;
+  return (
+    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+      Weighted: {weights.map((w) => `${TASK_TYPE_LABELS[w.task_type]} ${w.weight}%`).join(" · ")}
+      {total !== 100 && (
+        <span className="text-amber-800 dark:text-amber-300"> (total {total}%, not 100%)</span>
+      )}
+    </p>
+  );
+}
+
+type CardProps = { schoolClass: SchoolClass; average: ClassAverage; gradedTasks: GradedWorkItem[] };
+
+function ClassDetails({ schoolClass, average, gradedTasks }: CardProps) {
   const schedule = formatSchedule(schoolClass.class_meetings);
   const term = formatTerm(schoolClass.start_date, schoolClass.end_date);
   const people = [schoolClass.instructor, schoolClass.location].filter(Boolean).join(" · ");
@@ -38,11 +63,13 @@ function ClassDetails({ schoolClass, average }: { schoolClass: SchoolClass; aver
       )}
       {people && <p className="mt-1 break-words text-sm text-zinc-600 dark:text-zinc-400">{people}</p>}
       {term && <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">{term}</p>}
+      <GradingSummary schoolClass={schoolClass} />
+      <GradedWork tasks={gradedTasks} />
     </div>
   );
 }
 
-export function ClassCard({ schoolClass, average }: { schoolClass: SchoolClass; average: ClassAverage }) {
+export function ClassCard({ schoolClass, average, gradedTasks }: CardProps) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -61,7 +88,10 @@ export function ClassCard({ schoolClass, average }: { schoolClass: SchoolClass; 
 
   if (editing) {
     return (
-      <li className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+      <li
+        id={`class-${schoolClass.id}`}
+        className="scroll-mt-20 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+      >
         <h3 className="mb-3 font-semibold">Edit {schoolClass.name}</h3>
         <ClassForm
           schoolClass={schoolClass}
@@ -77,12 +107,13 @@ export function ClassCard({ schoolClass, average }: { schoolClass: SchoolClass; 
 
   return (
     <li
-      className={`rounded-xl border border-zinc-200 bg-white p-3 transition-opacity dark:border-zinc-800 dark:bg-zinc-950 ${
+      id={`class-${schoolClass.id}`}
+      className={`scroll-mt-20 rounded-xl border border-zinc-200 bg-white p-3 transition-opacity dark:border-zinc-800 dark:bg-zinc-950 ${
         pending ? "opacity-60" : ""
       }`}
     >
       <div className="flex items-start gap-3">
-        <ClassDetails schoolClass={schoolClass} average={average} />
+        <ClassDetails schoolClass={schoolClass} average={average} gradedTasks={gradedTasks} />
         <div className="-m-1.5 flex shrink-0">
           <button
             type="button"

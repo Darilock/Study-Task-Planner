@@ -134,7 +134,6 @@ function revalidateGrades() {
   revalidatePath("/planner");
   revalidatePath("/calendar");
   revalidatePath("/classes");
-  revalidatePath("/grades");
 }
 
 /**

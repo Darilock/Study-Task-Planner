@@ -97,20 +97,30 @@ The agent lives at `POST /api/agent` ([`app/api/agent/route.ts`](app/api/agent/r
 | `list_tasks` | Tasks with their type, priority, class, due and planned dates, estimated minutes, status and whether they're graded. Optional filters: date range, class, status (defaults to everything not done) |
 | `create_tasks` | New tasks with a title, class, type, priority, description, max points, due date, planned day and estimated minutes. Graded types need a class |
 | `update_task` | Change a task's priority, description, due date, planned day or estimated minutes. It can't change grades, and never touches completed tasks |
+| `create_class` | Create up to 5 classes with a name, instructor, location, palette color, term dates, grading mode, weekly meeting times and (in percent mode) weights |
 
-There's no delete tool. One request can create or update at most 15 tasks combined. A planned day can never be in the past or after the task's due date.
+There's no delete tool, and the agent can't edit existing classes or their grading settings. One request can create or update at most 15 tasks and classes combined. A planned day can never be in the past or after the task's due date.
+
+**Classes.** `create_class` checks each class before saving it:
+
+- Meeting days are 0–6 (Sunday–Saturday), and each meeting ends after it starts.
+- The term ends after it starts.
+- Weights are above 0 and at most 100.
+- The color comes from the app's class palette.
+
+If the weights don't total 100%, the class is still saved and the agent mentions it. A class with the same name as an existing one (ignoring case) isn't created; the agent is told to use the existing class instead. The class, its meetings and its weights are saved one after another, and if the meetings or weights fail, the new class is deleted so nothing is left half-made. When the student mentions a class that doesn't exist, the agent offers to create it and asks for its meeting times rather than guessing.
 
 **Safety.** Every query runs through the signed-in student's Supabase session, so Row Level Security limits the agent to their own data. Every tool input is validated before it reaches the database ([`lib/agent/validation.ts`](lib/agent/validation.ts), with tests), and so is the conversation the browser sends ([`lib/agent/history.ts`](lib/agent/history.ts)).
 
 **Planning rules.** The system prompt tells the agent to:
 
 - Match the student's wording to their classes, and ask a short question when that's ambiguous.
-- Never invent classes, and stay on topic.
+- Offer to create a class that doesn't exist yet, asking for its meeting times, and stay on topic.
 - Put lighter study on days with more class time.
 - Put Extreme and High priority work and at-risk classes first.
 - Create several "Study: …" sessions, spread before the due date, for exams and projects.
 
-When it finishes, the panel shows its reply and each change, like "Created: Quiz 3 (Bio), due Thu" or "Moved: History essay → study Wed". The Planner, the Calendar (with its This Week box) and Classes & Grades show the changes.
+When it finishes, the panel shows its reply and each change, like "Created: Quiz 3 (Bio), due Thu", "Moved: History essay → study Wed" or "Created class: Biology — MWF 10:00–10:50 AM". The Planner, the Calendar (with its This Week box) and Classes & Grades show the changes.
 
 ## Project structure
 

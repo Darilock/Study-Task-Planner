@@ -21,9 +21,17 @@ import { TaskItem } from "../planner/task-item";
 import { AgendaView } from "./agenda-view";
 import { DayList } from "./day-list";
 import { FilterPanel } from "./filter-panel";
-import { DEFAULT_FILTER, dayItemCount, groupByDay, type CalendarClass, type CalendarFilter } from "./items";
+import {
+  DEFAULT_FILTER,
+  dayItemCount,
+  groupByDay,
+  type CalendarClass,
+  type CalendarFilter,
+  type ClassRisk,
+} from "./items";
 import { MonthView } from "./month-view";
 import { Sheet } from "./sheet";
+import { WeekSummary } from "./week-summary";
 import { WeekView } from "./week-view";
 
 const FILTER_STORAGE_KEY = "calendar-filter";
@@ -62,9 +70,12 @@ type Props = {
   tasks: Task[];
   meetings: MeetingOccurrence[];
   classes: CalendarClass[];
+  /** For the This Week box: incomplete tasks due by the end of this week, overdue included. */
+  weekTasks: Task[];
+  risks: ClassRisk[];
 };
 
-export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classes }: Props) {
+export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classes, weekTasks, risks }: Props) {
   const router = useRouter();
   const today = useLocalToday();
   const [filter, setFilter] = useStoredValue(FILTER_STORAGE_KEY, parseFilter);
@@ -90,7 +101,10 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
 
   // Looked up on every render so the sheet shows fresh data after an edit,
   // and closes by itself if the task is deleted.
-  const openTask = openTaskId ? tasks.find((t) => t.id === openTaskId) : undefined;
+  // The This Week box can show overdue tasks from outside the visible range.
+  const openTask = openTaskId
+    ? (tasks.find((t) => t.id === openTaskId) ?? weekTasks.find((t) => t.id === openTaskId))
+    : undefined;
 
   const viewProps = {
     days,
@@ -108,6 +122,14 @@ export function Calendar({ view, anchor, hasDate, range, tasks, meetings, classe
 
   return (
     <>
+      <WeekSummary
+        tasks={weekTasks}
+        risks={risks}
+        classesById={classesById}
+        today={today}
+        onOpenTask={viewProps.onOpenTask}
+      />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center justify-between gap-2 sm:justify-start">
           <h1 className="text-lg font-semibold sm:order-last sm:ml-2 sm:text-xl">{rangeTitle(view, anchor)}</h1>

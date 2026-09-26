@@ -1,7 +1,11 @@
 import type { MeetingOccurrence } from "@/lib/calendar/recurrence";
+import type { LetterGrade, RiskLevel } from "@/lib/grades";
 import type { ClassSummary, Task } from "@/lib/types";
 
 export type CalendarClass = ClassSummary & { location: string | null };
+
+/** A class whose current average is below a risk threshold. */
+export type ClassRisk = { classId: string; level: RiskLevel; percent: number; letter: LetterGrade };
 
 /** Tasks with no class are filtered under this key. */
 export const NO_CLASS = "none";
